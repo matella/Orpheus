@@ -1,0 +1,34 @@
+import { logger } from './shared/logger.js';
+import { initDb, closeDb } from './database/connection.js';
+import { runMigrations } from './database/migrations.js';
+import { startServer } from './api/server.js';
+
+async function main() {
+  logger.info('');
+  logger.info('  ♪ ORPHEUS — Autonomous Music Intelligence');
+  logger.info('');
+
+  // Initialize database
+  const db = initDb();
+  runMigrations(db);
+
+  // Start API server
+  await startServer();
+
+  logger.info('Orpheus is ready');
+}
+
+// Graceful shutdown
+function shutdown(signal: string) {
+  logger.info({ signal }, 'Shutting down Orpheus...');
+  closeDb();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+main().catch((err) => {
+  logger.fatal({ err }, 'Failed to start Orpheus');
+  process.exit(1);
+});

@@ -1,0 +1,55 @@
+name: orpheus
+description: Orpheus — Autonomous Music Intelligence Client
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # HTTP & WebSocket
+  dio: ^5.7.0
+  web_socket_channel: ^3.0.1
+
+  # Routing
+  go_router: ^14.6.2
+
+  # UI
+  fl_chart: ^0.69.2
+  flutter_svg: ^2.0.16
+  cached_network_image: ^3.4.1
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+
+  # Data Classes
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.6.2
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+
+  fonts:
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-Regular.ttf
+        - asset: assets/fonts/Cinzel-Bold.ttf
+          weight: 700
