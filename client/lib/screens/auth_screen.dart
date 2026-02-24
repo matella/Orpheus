@@ -49,7 +49,7 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo placeholder
-                Icon(
+                const Icon(
                   Icons.music_note_rounded,
                   size: 80,
                   color: OrpheusColors.lyreGold,

@@ -14,7 +14,7 @@ class AnalyticsScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.bar_chart_rounded,
               size: 64,
               color: OrpheusColors.slate,

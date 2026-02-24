@@ -82,7 +82,7 @@ ThemeData buildOrpheusTheme() {
     ),
 
     // Cards
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: OrpheusColors.onyx,
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -134,11 +134,11 @@ ThemeData buildOrpheusTheme() {
       fillColor: OrpheusColors.onyx,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: OrpheusColors.slate),
+        borderSide: const BorderSide(color: OrpheusColors.slate),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: OrpheusColors.slate),
+        borderSide: const BorderSide(color: OrpheusColors.slate),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

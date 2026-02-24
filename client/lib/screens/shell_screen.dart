@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../config/theme.dart';
 
 /// Shell screen with bottom navigation bar
 class ShellScreen extends StatelessWidget {

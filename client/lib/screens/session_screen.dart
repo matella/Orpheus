@@ -14,7 +14,7 @@ class SessionScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.timeline_rounded,
               size: 64,
               color: OrpheusColors.slate,
