@@ -1,0 +1,102 @@
+import { getDb } from '../connection.js';
+import type { SessionRow } from '../types.js';
+
+/**
+ * Create a new playback session.
+ */
+export function createSession(data: {
+  deviceId?: string;
+  deviceName?: string;
+  initialContext?: string;
+  autoStarted?: boolean;
+}): number {
+  const db = getDb();
+  const result = db.prepare(`
+    INSERT INTO sessions (device_id, device_name, initial_context, auto_started)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    data.deviceId ?? null,
+    data.deviceName ?? null,
+    data.initialContext ?? null,
+    data.autoStarted ? 1 : 0,
+  );
+
+  return Number(result.lastInsertRowid);
+}
+
+/**
+ * End a session by setting ended_at timestamp.
+ */
+export function endSession(sessionId: number, stats?: {
+  trackCount?: number;
+  totalDurationMs?: number;
+  avgEnergy?: number;
+  avgValence?: number;
+}): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE sessions SET
+      ended_at = datetime('now'),
+      track_count = COALESCE(?, track_count),
+      total_duration_ms = COALESCE(?, total_duration_ms),
+      avg_energy = COALESCE(?, avg_energy),
+      avg_valence = COALESCE(?, avg_valence)
+    WHERE id = ?
+  `).run(
+    stats?.trackCount ?? null,
+    stats?.totalDurationMs ?? null,
+    stats?.avgEnergy ?? null,
+    stats?.avgValence ?? null,
+    sessionId,
+  );
+}
+
+/**
+ * Increment track count for a session.
+ */
+export function incrementTrackCount(sessionId: number, durationMs: number): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE sessions SET
+      track_count = track_count + 1,
+      total_duration_ms = total_duration_ms + ?
+    WHERE id = ?
+  `).run(durationMs, sessionId);
+}
+
+/**
+ * Get the currently active session (no ended_at).
+ */
+export function getActiveSession(): SessionRow | null {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1',
+  ).get() as SessionRow | undefined;
+  return row ?? null;
+}
+
+/**
+ * Get a session by ID.
+ */
+export function getSessionById(id: number): SessionRow | null {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as
+    | SessionRow
+    | undefined;
+  return row ?? null;
+}
+
+/**
+ * Get recent sessions (paginated).
+ */
+export function getSessionHistory(limit: number = 20, offset: number = 0): {
+  sessions: SessionRow[];
+  total: number;
+} {
+  const db = getDb();
+  const sessions = db.prepare(
+    'SELECT * FROM sessions ORDER BY started_at DESC LIMIT ? OFFSET ?',
+  ).all(limit, offset) as SessionRow[];
+  const total = (db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }).count;
+  return { sessions, total };
+}

@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { logger } from '../shared/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { playbackRoutes } from './routes/playback.routes.js';
 
 export async function buildServer() {
   const server = Fastify({
@@ -28,6 +29,7 @@ export async function buildServer() {
 
   // Register route modules
   await server.register(authRoutes, { prefix: '/api/auth' });
+  await server.register(playbackRoutes, { prefix: '/api/playback' });
 
   return server;
 }
