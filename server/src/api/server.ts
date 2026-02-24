@@ -5,6 +5,7 @@ import { logger } from '../shared/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { playbackRoutes } from './routes/playback.routes.js';
+import { registerWebSocket, wireEngineEvents } from './websocket.js';
 
 export async function buildServer() {
   const server = Fastify({
@@ -26,6 +27,10 @@ export async function buildServer() {
     service: 'orpheus',
     timestamp: new Date().toISOString(),
   }));
+
+  // WebSocket for real-time state push
+  await registerWebSocket(server);
+  wireEngineEvents();
 
   // Register route modules
   await server.register(authRoutes, { prefix: '/api/auth' });
