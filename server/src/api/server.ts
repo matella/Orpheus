@@ -10,6 +10,7 @@ import { settingsRoutes } from './routes/settings.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
 import { sessionRoutes } from './routes/session.routes.js';
 import { analyticsRoutes } from './routes/analytics.routes.js';
+import { contextRoutes } from './routes/context.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
 
 export async function buildServer() {
@@ -45,6 +46,7 @@ export async function buildServer() {
   await server.register(aiRoutes, { prefix: '/api/ai' });
   await server.register(sessionRoutes, { prefix: '/api/sessions' });
   await server.register(analyticsRoutes, { prefix: '/api/analytics' });
+  await server.register(contextRoutes, { prefix: '/api/context' });
 
   return server;
 }

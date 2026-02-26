@@ -7,6 +7,8 @@ import { playTrack, addToQueue } from '../spotify/player.js';
 import { getRandomTracks, getTrackBySpotifyId } from '../database/repositories/track.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
 import { selector } from '../intelligence/selector.js';
+import { stateVectorManager } from '../intelligence/state-vector.js';
+import { learnTimePreferences } from '../intelligence/context-learning.js';
 import { generateSessionName } from '../ai/service.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
 import { TrackQueue } from './queue.js';
@@ -61,16 +63,21 @@ class PlaybackEngine extends EventEmitter {
     this.trackCount = 0;
     this.startedAt = new Date().toISOString();
 
+    // Infer context before starting session
+    const inferredState = stateVectorManager.inferInitialState();
+    const initialContext = inferredState.context;
+
     // Start a session
     const sessionId = this.session.start({
       deviceId,
       deviceName,
+      initialContext,
       autoStarted,
     });
 
     this.emit('session_started', { sessionId, deviceName: this.deviceName });
     selector.initSession(sessionId);
-    logger.info({ deviceId, deviceName }, 'Playback engine started');
+    logger.info({ deviceId, deviceName, initialContext }, 'Playback engine started');
 
     // Select and play the first track
     await this.selectAndPlayInitial();
@@ -93,6 +100,8 @@ class PlaybackEngine extends EventEmitter {
 
     const sessionId = this.session.getSessionId();
     if (sessionId) {
+      // Learn time-of-day preferences from this session's state trajectory
+      learnTimePreferences(sessionId);
       selector.endSession(sessionId);
     }
     this.session.end({ trackCount: this.trackCount });

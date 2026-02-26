@@ -1,5 +1,6 @@
 import type { TrackRow } from '../database/types.js';
 import { recordState } from '../database/repositories/state-history.repo.js';
+import { getTimePreferences } from '../database/repositories/time-preferences.repo.js';
 import { STATE_VECTOR_ALPHA } from '../shared/constants.js';
 import { logger } from '../shared/logger.js';
 import type { StateVector } from './types.js';
@@ -12,10 +13,47 @@ export class StateVectorManager {
   private states: Map<number, StateVector> = new Map();
 
   /**
-   * Initialize a new session with neutral defaults.
+   * Initialize a new session using context-aware inference.
+   * Consults learned time-of-day patterns; falls back to neutral defaults
+   * if no historical data exists for the current time bracket.
    */
   initSession(sessionId: number): void {
-    const state: StateVector = {
+    const state = this.inferInitialState();
+    this.states.set(sessionId, state);
+    logger.debug(
+      { sessionId, context: state.context, energy: state.energy.toFixed(3), source: state.genreCluster ? 'learned' : 'default' },
+      'State vector initialized',
+    );
+  }
+
+  /**
+   * Infer the initial state vector from learned time-of-day preferences.
+   * Falls back to neutral defaults if no learned data exists.
+   */
+  inferInitialState(): StateVector {
+    const context = this.getTimeContext();
+    const prefs = getTimePreferences(context);
+
+    if (prefs && prefs.sample_count >= 2) {
+      logger.info(
+        { bracket: context, samples: prefs.sample_count },
+        'Using learned time preferences for initial state',
+      );
+      return {
+        energy: prefs.avg_energy,
+        valence: prefs.avg_valence,
+        tempo: prefs.avg_tempo,
+        genreCluster: prefs.preferred_genres,
+        familiarity: prefs.avg_familiarity,
+        vocalness: prefs.avg_vocalness,
+        aggressiveness: prefs.avg_aggressiveness,
+        context,
+        fatigueLevel: 0,
+      };
+    }
+
+    // No learned data — use neutral defaults
+    return {
       energy: 0.5,
       valence: 0.5,
       tempo: 120,
@@ -23,11 +61,9 @@ export class StateVectorManager {
       familiarity: 0.5,
       vocalness: 0.5,
       aggressiveness: 0.3,
-      context: this.getTimeContext(),
+      context,
       fatigueLevel: 0,
     };
-    this.states.set(sessionId, state);
-    logger.debug({ sessionId, context: state.context }, 'State vector initialized');
   }
 
   /**
