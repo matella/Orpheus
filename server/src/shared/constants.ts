@@ -50,3 +50,11 @@ export const TOP_CANDIDATES_FOR_RANDOM = 5;
 
 // Steering debounce
 export const STEERING_DEBOUNCE_MS = 300;
+
+// AI integration
+export const AI_ANALYSIS_INTERVAL = 5; // Analyze session every N tracks
+export const AI_REQUEST_TIMEOUT_MS = 15000; // 15s max for Ollama calls
+export const AI_WEIGHT_MULTIPLIER_MIN = 0.5; // Floor for AI weight multipliers
+export const AI_WEIGHT_MULTIPLIER_MAX = 2.0; // Ceiling for AI weight multipliers
+export const AI_MAX_CONTEXT_HISTORY = 20; // Max state history entries in prompt
+export const AI_INSIGHT_MIN_TRACKS = 3; // Min tracks before generating insight

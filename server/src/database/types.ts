@@ -82,3 +82,13 @@ export interface SettingRow {
   key: string;
   value: string;
 }
+
+export interface AiSuggestionRow {
+  id: number;
+  session_id: number | null;
+  suggestion_type: string;
+  prompt: string;
+  response: string;
+  applied: number;
+  created_at: string;
+}

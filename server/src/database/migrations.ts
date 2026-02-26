@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 /**
  * Run all database migrations.
@@ -12,6 +12,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 1) {
     migrateV1(db);
+  }
+
+  if (version < 2) {
+    migrateV2(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -204,4 +208,34 @@ function migrateV1(db: DatabaseSync): void {
 
   setSchemaVersion(db, 1);
   logger.info('Migration v1 complete');
+}
+
+function migrateV2(db: DatabaseSync): void {
+  logger.info('Running migration v2: AI suggestions');
+
+  db.exec(`
+    -- AI suggestion history
+    CREATE TABLE IF NOT EXISTS ai_suggestions (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id        INTEGER REFERENCES sessions(id),
+      suggestion_type   TEXT NOT NULL,
+      prompt            TEXT NOT NULL,
+      response          TEXT NOT NULL,
+      applied           INTEGER DEFAULT 0,
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_suggestions_session ON ai_suggestions(session_id);
+    CREATE INDEX IF NOT EXISTS idx_ai_suggestions_type ON ai_suggestions(suggestion_type);
+  `);
+
+  // Seed AI settings
+  const insertSetting = db.prepare(
+    'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
+  );
+  insertSetting.run('ai_enabled', 'true');
+  insertSetting.run('ai_analysis_interval', '5');
+
+  setSchemaVersion(db, 2);
+  logger.info('Migration v2 complete');
 }

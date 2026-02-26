@@ -5,6 +5,7 @@ import {
   SKIP_FATIGUE_THRESHOLD,
   FATIGUE_NOVELTY_BOOST,
 } from '../shared/constants.js';
+import { getActiveWeightSuggestion } from '../ai/service.js';
 import type { ScoringContext } from './types.js';
 
 /**
@@ -13,7 +14,7 @@ import type { ScoringContext } from './types.js';
  * Returns a value in roughly [0, 1] representing how well the track
  * fits the listener's current session state and steering preferences.
  */
-export function scoreTrack(track: TrackRow, context: ScoringContext): number {
+export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?: number): number {
   const { stateVector: state, steering } = context;
 
   // ---- 1. Compute adjusted weights ----
@@ -32,6 +33,20 @@ export function scoreTrack(track: TrackRow, context: ScoringContext): number {
   }
   if (steering.focusVsParty < 0.4) {
     weights.transition *= 1.3;
+  }
+
+  // Apply AI weight multipliers (if available)
+  if (sessionId != null) {
+    const aiSuggestion = getActiveWeightSuggestion(sessionId);
+    if (aiSuggestion) {
+      weights.stateSimilarity *= aiSuggestion.stateSimilarity;
+      weights.preference *= aiSuggestion.preference;
+      weights.novelty *= aiSuggestion.novelty;
+      weights.transition *= aiSuggestion.transition;
+      weights.fatigue *= aiSuggestion.fatigue;
+      weights.context *= aiSuggestion.context;
+      weights.recency *= aiSuggestion.recency;
+    }
   }
 
   // Normalize so weights sum to 1.0

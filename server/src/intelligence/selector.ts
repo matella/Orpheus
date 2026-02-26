@@ -9,6 +9,8 @@ import { loadSteeringControls } from './steering.js';
 import { getCandidates } from './candidate-pool.js';
 import { scoreTrack } from './scorer.js';
 import { processInteractionFeedback } from './feedback.js';
+import { analyzeSession, generateInsight, clearSessionSuggestion, isAiEnabled } from '../ai/service.js';
+import { getAiSettings } from '../database/repositories/settings.repo.js';
 import type { ScoringContext, ScoredTrack } from './types.js';
 
 /**
@@ -38,6 +40,7 @@ class IntelligenceSelector {
    */
   endSession(sessionId: number): void {
     stateVectorManager.endSession(sessionId);
+    clearSessionSuggestion(sessionId);
     this.recentTrackIds = [];
     this.recentArtists = [];
     this.sessionSkipCount = 0;
@@ -73,10 +76,10 @@ class IntelligenceSelector {
       return null;
     }
 
-    // 5. Score each candidate
+    // 5. Score each candidate (pass sessionId for AI weight multipliers)
     const scored: ScoredTrack[] = candidates.map((track) => ({
       track,
-      score: scoreTrack(track, scoringContext),
+      score: scoreTrack(track, scoringContext, sessionId),
     }));
 
     // 6. Sort by score descending
@@ -133,6 +136,19 @@ class IntelligenceSelector {
 
     // Persist state snapshot
     stateVectorManager.recordToDb(sessionId);
+
+    // Fire-and-forget AI analysis at configured intervals
+    if (isAiEnabled()) {
+      const { aiAnalysisInterval } = getAiSettings();
+      if (this.sessionTrackCount > 0 && this.sessionTrackCount % aiAnalysisInterval === 0) {
+        Promise.all([
+          analyzeSession(sessionId),
+          generateInsight(sessionId),
+        ]).catch((err) => {
+          logger.warn({ err }, 'AI analysis fire-and-forget failed');
+        });
+      }
+    }
   }
 
   /**
