@@ -138,6 +138,27 @@ class ApiService {
     return response.data;
   }
 
+  /// Get all monthly recaps
+  Future<Map<String, dynamic>> getAiRecaps() async {
+    final response = await _dio.get('/ai/recaps');
+    return response.data;
+  }
+
+  /// Generate a monthly recap (defaults to previous month)
+  Future<Map<String, dynamic>> generateAiRecap({int? year, int? month}) async {
+    final response = await _dio.post('/ai/recaps', data: {
+      if (year != null) 'year': year,
+      if (month != null) 'month': month,
+    });
+    return response.data;
+  }
+
+  /// AI context inference for session start
+  Future<Map<String, dynamic>> getAiContextInference() async {
+    final response = await _dio.post('/ai/infer');
+    return response.data;
+  }
+
   // --- Sessions ---
 
   /// Get paginated session history

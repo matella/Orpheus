@@ -11,7 +11,8 @@ class ShellScreen extends StatelessWidget {
     final location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/session')) return 1;
     if (location.startsWith('/analytics')) return 2;
-    if (location.startsWith('/settings')) return 3;
+    if (location.startsWith('/intelligence')) return 3;
+    if (location.startsWith('/settings')) return 4;
     return 0;
   }
 
@@ -24,6 +25,8 @@ class ShellScreen extends StatelessWidget {
       case 2:
         context.go('/analytics');
       case 3:
+        context.go('/intelligence');
+      case 4:
         context.go('/settings');
     }
   }
@@ -47,6 +50,10 @@ class ShellScreen extends StatelessWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_rounded),
             label: 'Analytics',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.auto_awesome),
+            label: 'AI',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_rounded),

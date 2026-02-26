@@ -22,6 +22,28 @@ export interface InsightSuggestion {
   category: string;
 }
 
+export interface SessionRecapSuggestion {
+  recap: string;
+  mood: string;
+  highlights: string[];
+}
+
+export interface MonthlyRecapSuggestion {
+  recap: string;
+  highlights: string[];
+  personality: string;
+}
+
+export interface ContextInferenceSuggestion {
+  energy: number;
+  valence: number;
+  tempo: number;
+  familiarity: number;
+  vocalness: number;
+  aggressiveness: number;
+  reasoning: string;
+}
+
 // ── Context Interfaces ─────────────────────────────────────────────
 
 export interface SessionContext {
@@ -155,5 +177,136 @@ Respond with ONLY this JSON format:
 {
   "insight": "Your insight here",
   "category": "mood"
+}`;
+}
+
+export interface SessionRecapContext {
+  trackCount: number;
+  durationMinutes: number;
+  avgEnergy: number;
+  avgValence: number;
+  dominantGenres: string[];
+  timeOfDay: string;
+  skipRate: number;
+  energyArc: string;
+}
+
+export function buildSessionRecapPrompt(ctx: SessionRecapContext): string {
+  return `You are a music listening companion. Write a brief, personal recap of a listening session that just ended.
+
+SESSION:
+- ${ctx.trackCount} tracks over ${ctx.durationMinutes} minutes
+- Average energy: ${ctx.avgEnergy.toFixed(2)} (0=calm, 1=intense)
+- Average mood: ${ctx.avgValence.toFixed(2)} (0=dark, 1=bright)
+- Genres: ${ctx.dominantGenres.join(', ') || 'varied'}
+- Time: ${ctx.timeOfDay}
+- Skip rate: ${(ctx.skipRate * 100).toFixed(0)}%
+- Energy arc: ${ctx.energyArc}
+
+Write a 1-2 sentence recap that captures the vibe and journey of this session. Be poetic but concise. Also identify the overall mood and 1-2 highlights.
+
+Respond with ONLY this JSON format:
+{
+  "recap": "Your session recap here",
+  "mood": "one-word mood descriptor",
+  "highlights": ["highlight 1", "highlight 2"]
+}`;
+}
+
+export interface MonthlyRecapContext {
+  year: number;
+  month: number;
+  totalHours: number;
+  totalTracks: number;
+  totalSessions: number;
+  avgEnergy: number;
+  avgValence: number;
+  topGenres: { genre: string; count: number }[];
+  topArtists: { artist: string; count: number }[];
+  skipRate: number;
+  discoveryRate: number;
+  peakListeningHour: number;
+  sessionNames: string[];
+}
+
+export function buildMonthlyRecapPrompt(ctx: MonthlyRecapContext): string {
+  const monthName = new Date(ctx.year, ctx.month - 1).toLocaleString('en', { month: 'long' });
+  const genres = ctx.topGenres.slice(0, 5).map((g) => `${g.genre} (${g.count})`).join(', ');
+  const artists = ctx.topArtists.slice(0, 5).map((a) => `${a.artist} (${a.count})`).join(', ');
+  const sessions = ctx.sessionNames.length > 0
+    ? ctx.sessionNames.slice(0, 5).join(', ')
+    : 'unnamed sessions';
+
+  return `You are a music listening companion writing a monthly listening recap for ${monthName} ${ctx.year}.
+
+STATS:
+- ${ctx.totalHours.toFixed(1)} hours of music across ${ctx.totalSessions} sessions
+- ${ctx.totalTracks} tracks played
+- Average energy: ${ctx.avgEnergy.toFixed(2)} | Average mood: ${ctx.avgValence.toFixed(2)}
+- Skip rate: ${(ctx.skipRate * 100).toFixed(0)}% | Discovery rate: ${(ctx.discoveryRate * 100).toFixed(0)}%
+- Top genres: ${genres || 'varied'}
+- Top artists: ${artists || 'various'}
+- Peak listening hour: ${ctx.peakListeningHour}:00
+- Notable sessions: ${sessions}
+
+Write a 3-4 sentence narrative recap that captures the listener's musical month. Be personal, warm, and specific. Identify 2-3 highlights and a one-word personality descriptor for their listening style.
+
+Respond with ONLY this JSON format:
+{
+  "recap": "Your monthly recap here",
+  "highlights": ["highlight 1", "highlight 2"],
+  "personality": "one-word listener personality"
+}`;
+}
+
+export interface ContextInferenceInput {
+  timeBracket: string;
+  dayOfWeek: string;
+  learnedPrefs: {
+    energy: number;
+    valence: number;
+    tempo: number;
+    familiarity: number;
+    vocalness: number;
+    aggressiveness: number;
+    genres: string | null;
+    sampleCount: number;
+  } | null;
+  recentSessionMoods: string[];
+  recentGenres: string[];
+}
+
+export function buildContextInferencePrompt(ctx: ContextInferenceInput): string {
+  const learnedSection = ctx.learnedPrefs
+    ? `LEARNED PREFERENCES for ${ctx.timeBracket} (from ${ctx.learnedPrefs.sampleCount} sessions):
+- Energy: ${ctx.learnedPrefs.energy.toFixed(2)} | Valence: ${ctx.learnedPrefs.valence.toFixed(2)}
+- Tempo: ${ctx.learnedPrefs.tempo.toFixed(0)} BPM | Familiarity: ${ctx.learnedPrefs.familiarity.toFixed(2)}
+- Preferred genres: ${ctx.learnedPrefs.genres || 'varied'}`
+    : 'No learned preferences yet for this time bracket.';
+
+  const moods = ctx.recentSessionMoods.length > 0
+    ? ctx.recentSessionMoods.join(', ')
+    : 'none available';
+
+  return `You are an AI music advisor. Suggest the ideal initial listening state for a new session starting now.
+
+CONTEXT:
+- Time: ${ctx.timeBracket} (${ctx.dayOfWeek})
+- Recent session moods: ${moods}
+- Recent genres: ${ctx.recentGenres.join(', ') || 'varied'}
+
+${learnedSection}
+
+Based on the time of day, day of week, and listening history, suggest initial state values. Each value is 0-1 except tempo (60-200 BPM).
+
+Respond with ONLY this JSON format:
+{
+  "energy": 0.5,
+  "valence": 0.5,
+  "tempo": 120,
+  "familiarity": 0.5,
+  "vocalness": 0.5,
+  "aggressiveness": 0.3,
+  "reasoning": "Brief reasoning for your suggestions"
 }`;
 }

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 /**
  * Run all database migrations.
@@ -16,6 +16,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 2) {
     migrateV2(db);
+  }
+
+  if (version < 3) {
+    migrateV3(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -238,4 +242,27 @@ function migrateV2(db: DatabaseSync): void {
 
   setSchemaVersion(db, 2);
   logger.info('Migration v2 complete');
+}
+
+function migrateV3(db: DatabaseSync): void {
+  logger.info('Running migration v3: AI reasoning layer');
+
+  db.exec(`
+    -- Add session name column for AI-generated names
+    ALTER TABLE sessions ADD COLUMN session_name TEXT;
+
+    -- Monthly AI-generated listening recaps
+    CREATE TABLE IF NOT EXISTS monthly_recaps (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      year        INTEGER NOT NULL,
+      month       INTEGER NOT NULL,
+      recap       TEXT NOT NULL,
+      stats       TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      UNIQUE(year, month)
+    );
+  `);
+
+  setSchemaVersion(db, 3);
+  logger.info('Migration v3 complete');
 }

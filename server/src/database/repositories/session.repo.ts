@@ -100,3 +100,11 @@ export function getSessionHistory(limit: number = 20, offset: number = 0): {
   const total = (db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }).count;
   return { sessions, total };
 }
+
+/**
+ * Update session name (AI-generated).
+ */
+export function updateSessionName(sessionId: number, name: string): void {
+  const db = getDb();
+  db.prepare('UPDATE sessions SET session_name = ? WHERE id = ?').run(name, sessionId);
+}

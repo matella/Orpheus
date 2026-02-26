@@ -16,6 +16,7 @@ function formatSession(row: SessionRow) {
     avgValence: row.avg_valence,
     initialContext: row.initial_context,
     autoStarted: row.auto_started === 1,
+    sessionName: row.session_name,
   };
 }
 

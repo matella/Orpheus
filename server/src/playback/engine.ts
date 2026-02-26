@@ -9,7 +9,7 @@ import { recordInteraction } from '../database/repositories/interaction.repo.js'
 import { selector } from '../intelligence/selector.js';
 import { stateVectorManager } from '../intelligence/state-vector.js';
 import { learnTimePreferences } from '../intelligence/context-learning.js';
-import { generateSessionName } from '../ai/service.js';
+import { generateSessionName, generateSessionRecap } from '../ai/service.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
 import { TrackQueue } from './queue.js';
 import { SessionManager } from './session.js';
@@ -106,10 +106,13 @@ class PlaybackEngine extends EventEmitter {
     }
     this.session.end({ trackCount: this.trackCount });
 
-    // Fire-and-forget AI session name generation
+    // Fire-and-forget AI session name + recap generation
     if (sessionId) {
-      generateSessionName(sessionId).catch(() => {
-        // Silently ignore — AI naming is best-effort
+      Promise.all([
+        generateSessionName(sessionId),
+        generateSessionRecap(sessionId),
+      ]).catch(() => {
+        // Silently ignore — AI features are best-effort
       });
     }
 

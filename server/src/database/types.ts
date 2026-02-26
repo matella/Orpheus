@@ -49,6 +49,7 @@ export interface SessionRow {
   avg_valence: number | null;
   initial_context: string | null;
   auto_started: number;
+  session_name: string | null;
 }
 
 export interface PreferenceRow {
@@ -90,5 +91,14 @@ export interface AiSuggestionRow {
   prompt: string;
   response: string;
   applied: number;
+  created_at: string;
+}
+
+export interface MonthlyRecapRow {
+  id: number;
+  year: number;
+  month: number;
+  recap: string;
+  stats: string;
   created_at: string;
 }

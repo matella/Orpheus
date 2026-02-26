@@ -9,7 +9,7 @@ import {
 import { getAiSettings } from '../database/repositories/settings.repo.js';
 import { getStateHistory } from '../database/repositories/state-history.repo.js';
 import { getSessionInteractions } from '../database/repositories/interaction.repo.js';
-import { getSessionById } from '../database/repositories/session.repo.js';
+import { getSessionById, updateSessionName } from '../database/repositories/session.repo.js';
 import { insertAiSuggestion } from '../database/repositories/ai-suggestion.repo.js';
 import { loadSteeringControls } from '../intelligence/steering.js';
 import { stateVectorManager } from '../intelligence/state-vector.js';
@@ -19,10 +19,19 @@ import {
   buildWeightSuggestionPrompt,
   buildSessionNamePrompt,
   buildInsightPrompt,
+  buildSessionRecapPrompt,
+  buildMonthlyRecapPrompt,
+  buildContextInferencePrompt,
   type WeightSuggestion,
   type SessionNameSuggestion,
   type InsightSuggestion,
+  type SessionRecapSuggestion,
+  type MonthlyRecapSuggestion,
+  type ContextInferenceSuggestion,
   type SessionContext,
+  type SessionRecapContext,
+  type MonthlyRecapContext,
+  type ContextInferenceInput,
 } from './prompts.js';
 
 // ── In-Memory Cache ────────────────────────────────────────────────
@@ -253,13 +262,14 @@ export async function generateSessionName(sessionId: number): Promise<string | n
     // Clean up: trim and limit length
     const name = result.name.trim().slice(0, 60);
 
-    // Persist
+    // Persist to ai_suggestions and update session row
     insertAiSuggestion({
       sessionId,
       suggestionType: 'name',
       prompt,
       response: JSON.stringify({ name }),
     });
+    updateSessionName(sessionId, name);
 
     logger.info({ sessionId, name }, 'AI session name generated');
     return name;
@@ -306,6 +316,157 @@ export async function generateInsight(sessionId: number): Promise<string | null>
     return insight;
   } catch (err) {
     logger.warn({ err, sessionId }, 'AI insight generation failed');
+    return null;
+  }
+}
+
+/**
+ * Generate an end-of-session recap and broadcast it.
+ */
+export async function generateSessionRecap(sessionId: number): Promise<SessionRecapSuggestion | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const session = getSessionById(sessionId);
+    if (!session) return null;
+
+    const stateHistory = getStateHistory(sessionId);
+    if (stateHistory.length < 3) return null;
+
+    const interactions = getSessionInteractions(sessionId);
+    const playSkip = interactions.filter(
+      (i) => i.interaction_type === 'play' || i.interaction_type === 'skip',
+    );
+    const skipCount = playSkip.filter((i) => i.interaction_type === 'skip').length;
+    const skipRate = playSkip.length > 0 ? skipCount / playSkip.length : 0;
+
+    const avgEnergy = stateHistory.reduce((s, h) => s + (h.energy ?? 0.5), 0) / stateHistory.length;
+    const avgValence = stateHistory.reduce((s, h) => s + (h.valence ?? 0.5), 0) / stateHistory.length;
+
+    const genreCounts = new Map<string, number>();
+    for (const entry of stateHistory) {
+      if (entry.genre_cluster) {
+        genreCounts.set(entry.genre_cluster, (genreCounts.get(entry.genre_cluster) ?? 0) + 1);
+      }
+    }
+    const dominantGenres = [...genreCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([genre]) => genre);
+
+    const startHour = new Date(session.started_at).getHours();
+    const timeOfDay =
+      startHour >= 6 && startHour < 12 ? 'morning' :
+      startHour >= 12 && startHour < 17 ? 'afternoon' :
+      startHour >= 17 && startHour < 22 ? 'evening' : 'night';
+
+    // Build energy arc description
+    const quarter = Math.floor(stateHistory.length / 4);
+    const firstQuarter = stateHistory.slice(0, quarter);
+    const lastQuarter = stateHistory.slice(-quarter);
+    const firstAvg = firstQuarter.reduce((s, h) => s + (h.energy ?? 0.5), 0) / (firstQuarter.length || 1);
+    const lastAvg = lastQuarter.reduce((s, h) => s + (h.energy ?? 0.5), 0) / (lastQuarter.length || 1);
+    const energyArc = lastAvg > firstAvg + 0.1 ? 'building up'
+      : lastAvg < firstAvg - 0.1 ? 'winding down'
+      : 'steady';
+
+    const durationMinutes = session.total_duration_ms
+      ? Math.round(session.total_duration_ms / 60000)
+      : stateHistory.length * 3;
+
+    const ctx: SessionRecapContext = {
+      trackCount: session.track_count,
+      durationMinutes,
+      avgEnergy,
+      avgValence,
+      dominantGenres,
+      timeOfDay,
+      skipRate,
+      energyArc,
+    };
+
+    const prompt = buildSessionRecapPrompt(ctx);
+    const result = await generateJson<SessionRecapSuggestion>(prompt);
+
+    if (!result?.recap || typeof result.recap !== 'string') return null;
+
+    // Persist
+    insertAiSuggestion({
+      sessionId,
+      suggestionType: 'recap',
+      prompt,
+      response: JSON.stringify(result),
+    });
+
+    // Broadcast
+    broadcast({
+      type: 'session_recap',
+      data: { sessionId, recap: result.recap, mood: result.mood },
+    });
+
+    logger.info({ sessionId, mood: result.mood }, 'AI session recap generated');
+    return result;
+  } catch (err) {
+    logger.warn({ err, sessionId }, 'AI session recap generation failed');
+    return null;
+  }
+}
+
+/**
+ * Generate a monthly listening recap via AI.
+ */
+export async function generateMonthlyRecap(
+  ctx: MonthlyRecapContext,
+): Promise<MonthlyRecapSuggestion | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const prompt = buildMonthlyRecapPrompt(ctx);
+    const result = await generateJson<MonthlyRecapSuggestion>(prompt, { timeout: 30000 });
+
+    if (!result?.recap || typeof result.recap !== 'string') return null;
+
+    logger.info(
+      { year: ctx.year, month: ctx.month, personality: result.personality },
+      'Monthly recap generated',
+    );
+    return result;
+  } catch (err) {
+    logger.warn({ err, year: ctx.year, month: ctx.month }, 'Monthly recap generation failed');
+    return null;
+  }
+}
+
+/**
+ * Use AI to infer the ideal initial state for a new session.
+ * Returns null if AI is unavailable; caller should fall back to rule-based inference.
+ */
+export async function inferContextViaAi(
+  input: ContextInferenceInput,
+): Promise<ContextInferenceSuggestion | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const prompt = buildContextInferencePrompt(input);
+    const result = await generateJson<ContextInferenceSuggestion>(prompt);
+
+    if (!result || typeof result.energy !== 'number') return null;
+
+    // Clamp values to valid ranges
+    result.energy = Math.max(0, Math.min(1, result.energy));
+    result.valence = Math.max(0, Math.min(1, result.valence));
+    result.tempo = Math.max(60, Math.min(200, result.tempo));
+    result.familiarity = Math.max(0, Math.min(1, result.familiarity));
+    result.vocalness = Math.max(0, Math.min(1, result.vocalness));
+    result.aggressiveness = Math.max(0, Math.min(1, result.aggressiveness));
+
+    logger.info(
+      { energy: result.energy.toFixed(2), reasoning: result.reasoning },
+      'AI context inference complete',
+    );
+    return result;
+  } catch (err) {
+    logger.warn({ err }, 'AI context inference failed');
     return null;
   }
 }
