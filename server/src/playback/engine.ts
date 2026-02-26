@@ -7,6 +7,7 @@ import { playTrack, addToQueue } from '../spotify/player.js';
 import { getRandomTracks, getTrackBySpotifyId } from '../database/repositories/track.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
 import { selector } from '../intelligence/selector.js';
+import { generateSessionName } from '../ai/service.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
 import { TrackQueue } from './queue.js';
 import { SessionManager } from './session.js';
@@ -95,6 +96,13 @@ class PlaybackEngine extends EventEmitter {
       selector.endSession(sessionId);
     }
     this.session.end({ trackCount: this.trackCount });
+
+    // Fire-and-forget AI session name generation
+    if (sessionId) {
+      generateSessionName(sessionId).catch(() => {
+        // Silently ignore — AI naming is best-effort
+      });
+    }
 
     if (sessionId) {
       this.emit('session_ended', { sessionId, trackCount: this.trackCount });

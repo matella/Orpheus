@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../providers/steering_provider.dart';
+import '../services/api_service.dart';
+import '../services/websocket_service.dart';
 import '../widgets/now_playing_card.dart';
 import '../widgets/feedback_buttons.dart';
 import '../widgets/steering_slider.dart';
@@ -28,6 +31,11 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _steeringExpanded = false;
 
+  // AI state
+  String _aiStatus = 'unknown'; // 'active', 'offline', 'disabled', 'unknown'
+  String? _latestInsight;
+  StreamSubscription<Map<String, dynamic>>? _wsSub;
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +43,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Future.microtask(
       () => ref.read(steeringProvider.notifier).load(),
     );
+    _loadAiStatus();
+    _connectWebSocket();
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadAiStatus() async {
+    try {
+      final status = await apiService.getAiStatus();
+      if (!mounted) return;
+      setState(() {
+        if (status['enabled'] == true && status['ollama']?['reachable'] == true) {
+          _aiStatus = 'active';
+        } else if (status['enabled'] == true) {
+          _aiStatus = 'offline';
+        } else {
+          _aiStatus = 'disabled';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _aiStatus = 'unknown');
+    }
+  }
+
+  void _connectWebSocket() {
+    wsService.connect();
+    _wsSub = wsService.messages.listen((msg) {
+      if (msg['type'] == 'ai_insight' && mounted) {
+        final data = msg['data'] as Map<String, dynamic>?;
+        if (data != null && data['insight'] is String) {
+          setState(() => _latestInsight = data['insight'] as String);
+        }
+      }
+    });
   }
 
   @override
@@ -68,7 +115,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               const SizedBox(height: 32),
 
-              // Connection status
+              // AI insight banner
+              if (_latestInsight != null)
+                Dismissible(
+                  key: ValueKey(_latestInsight),
+                  onDismissed: (_) => setState(() => _latestInsight = null),
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: OrpheusColors.deepGold.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: OrpheusColors.lyreGold.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: OrpheusColors.lyreGold,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _latestInsight!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: OrpheusColors.amberGlow,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Connection status + AI chip
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 12),
@@ -95,6 +180,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       'Waiting for connection...',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const Spacer(),
+                    _buildAiChip(),
                   ],
                 ),
               ),
@@ -108,6 +195,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAiChip() {
+    Color chipColor;
+    String label;
+
+    switch (_aiStatus) {
+      case 'active':
+        chipColor = OrpheusColors.laurelGreen;
+        label = 'AI';
+        break;
+      case 'offline':
+        chipColor = OrpheusColors.wineRed;
+        label = 'AI';
+        break;
+      case 'disabled':
+        chipColor = OrpheusColors.slate;
+        label = 'AI';
+        break;
+      default:
+        chipColor = OrpheusColors.slate;
+        label = 'AI';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: chipColor.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: chipColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: chipColor,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
       ),
     );
   }

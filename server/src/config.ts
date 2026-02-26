@@ -20,8 +20,9 @@ const configSchema = z.object({
     level: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
   }),
   ai: z.object({
-    ollamaHost: z.string().optional(),
-    ollamaModel: z.string().optional(),
+    enabled: z.boolean(),
+    ollamaHost: z.string(),
+    ollamaModel: z.string(),
   }),
 });
 
@@ -45,8 +46,9 @@ function loadConfig(): Config {
       level: process.env.LOG_LEVEL ?? 'info',
     },
     ai: {
-      ollamaHost: process.env.OLLAMA_HOST,
-      ollamaModel: process.env.OLLAMA_MODEL,
+      enabled: process.env.AI_ENABLED !== 'false',
+      ollamaHost: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
+      ollamaModel: process.env.OLLAMA_MODEL ?? 'llama3.2',
     },
   };
 

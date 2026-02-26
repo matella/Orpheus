@@ -115,6 +115,28 @@ class ApiService {
   Future<void> stopEngine() async {
     await _dio.post('/playback/stop');
   }
+
+  // --- AI Integration ---
+
+  /// Get AI system status
+  Future<Map<String, dynamic>> getAiStatus() async {
+    final response = await _dio.get('/ai/status');
+    return response.data;
+  }
+
+  /// Get AI suggestions for a session
+  Future<List<dynamic>> getAiSuggestions({int? sessionId}) async {
+    final response = await _dio.get('/ai/suggestions', queryParameters: {
+      if (sessionId != null) 'sessionId': sessionId,
+    });
+    return response.data['suggestions'] ?? [];
+  }
+
+  /// Manually trigger AI analysis
+  Future<Map<String, dynamic>> triggerAiAnalysis() async {
+    final response = await _dio.post('/ai/analyze');
+    return response.data;
+  }
 }
 
 /// Global API service instance

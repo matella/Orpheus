@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   getAutomationSettings,
+  getAiSettings,
   setSettings,
   SETTING_KEYS,
 } from '../../database/repositories/settings.repo.js';
@@ -17,7 +18,7 @@ export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
    * Get current automation settings.
    */
   fastify.get('/', async () => {
-    return getAutomationSettings();
+    return { ...getAutomationSettings(), ...getAiSettings() };
   });
 
   /**
@@ -31,6 +32,8 @@ export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
       autoStartDelay: number;
       quietHoursStart: number;
       quietHoursEnd: number;
+      aiEnabled: boolean;
+      aiAnalysisInterval: number;
     }>;
 
     const updates: Record<string, string> = {};
@@ -51,10 +54,18 @@ export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
       updates[SETTING_KEYS.QUIET_HOURS_END] = String(clamped);
     }
 
+    if (typeof body.aiEnabled === 'boolean') {
+      updates[SETTING_KEYS.AI_ENABLED] = String(body.aiEnabled);
+    }
+    if (typeof body.aiAnalysisInterval === 'number') {
+      const clamped = Math.max(2, Math.min(20, Math.round(body.aiAnalysisInterval)));
+      updates[SETTING_KEYS.AI_ANALYSIS_INTERVAL] = String(clamped);
+    }
+
     if (Object.keys(updates).length > 0) {
       setSettings(updates);
     }
 
-    return { success: true, settings: getAutomationSettings() };
+    return { success: true, settings: { ...getAutomationSettings(), ...getAiSettings() } };
   });
 }

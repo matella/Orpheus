@@ -5,6 +5,8 @@ export const SETTING_KEYS = {
   AUTO_START_DELAY: 'auto_start_delay',
   QUIET_HOURS_START: 'quiet_hours_start',
   QUIET_HOURS_END: 'quiet_hours_end',
+  AI_ENABLED: 'ai_enabled',
+  AI_ANALYSIS_INTERVAL: 'ai_analysis_interval',
 } as const;
 
 export interface AutomationSettings {
@@ -12,6 +14,11 @@ export interface AutomationSettings {
   autoStartDelay: number;
   quietHoursStart: number;
   quietHoursEnd: number;
+}
+
+export interface AiSettings {
+  aiEnabled: boolean;
+  aiAnalysisInterval: number;
 }
 
 /**
@@ -67,6 +74,17 @@ export function getAutomationSettings(): AutomationSettings {
     autoStartDelay: parseInt(all[SETTING_KEYS.AUTO_START_DELAY] ?? '5', 10),
     quietHoursStart: parseInt(all[SETTING_KEYS.QUIET_HOURS_START] ?? '23', 10),
     quietHoursEnd: parseInt(all[SETTING_KEYS.QUIET_HOURS_END] ?? '7', 10),
+  };
+}
+
+/**
+ * Get AI settings as a typed object with parsed values.
+ */
+export function getAiSettings(): AiSettings {
+  const all = getAllSettings();
+  return {
+    aiEnabled: all[SETTING_KEYS.AI_ENABLED] !== 'false',
+    aiAnalysisInterval: parseInt(all[SETTING_KEYS.AI_ANALYSIS_INTERVAL] ?? '5', 10),
   };
 }
 

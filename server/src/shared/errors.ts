@@ -36,3 +36,10 @@ export class DatabaseError extends OrpheusError {
     this.name = 'DatabaseError';
   }
 }
+
+export class AiError extends OrpheusError {
+  constructor(message: string) {
+    super(message, 'AI_ERROR', 502);
+    this.name = 'AiError';
+  }
+}

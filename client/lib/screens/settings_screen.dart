@@ -22,6 +22,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _quietHoursEnd = 7;
   bool _isLoadingSettings = true;
 
+  // AI settings
+  bool _aiEnabled = true;
+  double _aiAnalysisInterval = 5;
+
   Future<void> _checkConnection() async {
     setState(() => _isChecking = true);
     try {
@@ -43,6 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _autoStartDelay = (data['autoStartDelay'] ?? 5).toDouble();
         _quietHoursStart = data['quietHoursStart'] ?? 23;
         _quietHoursEnd = data['quietHoursEnd'] ?? 7;
+        _aiEnabled = data['aiEnabled'] ?? true;
+        _aiAnalysisInterval = (data['aiAnalysisInterval'] ?? 5).toDouble();
         _isLoadingSettings = false;
       });
     } catch (_) {
@@ -284,6 +290,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+            ),
+          ],
+
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 32),
+
+          // AI Intelligence
+          Text(
+            'AI Intelligence',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 12),
+
+          if (!_isLoadingSettings) ...[
+            // AI toggle
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'AI Advisor',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              subtitle: Text(
+                'Let Ollama analyze sessions and suggest scoring adjustments',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              value: _aiEnabled,
+              activeColor: OrpheusColors.lyreGold,
+              onChanged: (value) {
+                setState(() => _aiEnabled = value);
+                _saveSettings({'aiEnabled': value});
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // Analysis frequency
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Analysis Frequency',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: OrpheusColors.onyx,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Every ${_aiAnalysisInterval.round()} tracks',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: OrpheusColors.lyreGold,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'How often the AI re-evaluates scoring weights',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Slider(
+              value: _aiAnalysisInterval,
+              min: 2,
+              max: 20,
+              divisions: 18,
+              label: '${_aiAnalysisInterval.round()} tracks',
+              onChanged: _aiEnabled
+                  ? (value) {
+                      setState(() => _aiAnalysisInterval = value);
+                    }
+                  : null,
+              onChangeEnd: (value) {
+                _saveSettings({'aiAnalysisInterval': value.round()});
+              },
             ),
           ],
 
