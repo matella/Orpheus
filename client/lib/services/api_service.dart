@@ -86,6 +86,35 @@ class ApiService {
   Future<void> updateSteeringControls(Map<String, double> controls) async {
     await _dio.put('/steering', data: controls);
   }
+
+  // --- Automation Settings ---
+
+  /// Get automation settings
+  Future<Map<String, dynamic>> getSettings() async {
+    final response = await _dio.get('/settings');
+    return response.data;
+  }
+
+  /// Update automation settings (partial update supported)
+  Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> settings) async {
+    final response = await _dio.put('/settings', data: settings);
+    return response.data;
+  }
+
+  // --- Engine Control ---
+
+  /// Manually start the playback engine
+  Future<Map<String, dynamic>> startEngine({String? deviceId}) async {
+    final response = await _dio.post('/playback/start', data: {
+      if (deviceId != null) 'deviceId': deviceId,
+    });
+    return response.data;
+  }
+
+  /// Manually stop the playback engine
+  Future<void> stopEngine() async {
+    await _dio.post('/playback/stop');
+  }
 }
 
 /// Global API service instance

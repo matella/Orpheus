@@ -46,8 +46,9 @@ class PlaybackEngine extends EventEmitter {
 
   /**
    * Start the engine for a given device.
+   * @param autoStarted Whether this was triggered by the scheduler (true) or manually (false).
    */
-  async start(deviceId: string, deviceName?: string): Promise<void> {
+  async start(deviceId: string, deviceName?: string, autoStarted: boolean = true): Promise<void> {
     if (this.status === 'running') {
       logger.warn('Engine already running');
       return;
@@ -63,7 +64,7 @@ class PlaybackEngine extends EventEmitter {
     const sessionId = this.session.start({
       deviceId,
       deviceName,
-      autoStarted: true,
+      autoStarted,
     });
 
     this.emit('session_started', { sessionId, deviceName: this.deviceName });

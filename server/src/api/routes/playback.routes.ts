@@ -94,6 +94,55 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /api/playback/start
+   * Manually start the engine on a specific device.
+   * Body: { deviceId?: string, deviceName?: string }
+   * If no deviceId is provided, uses the first active Spotify device.
+   */
+  fastify.post('/start', async (request, reply) => {
+    if (engine.isRunning()) {
+      return reply.status(400).send({
+        error: 'ENGINE_ALREADY_RUNNING',
+        message: 'Playback engine is already running',
+      });
+    }
+
+    const body = (request.body as { deviceId?: string; deviceName?: string }) ?? {};
+
+    if (!body.deviceId) {
+      const devices = await getDevices();
+      const active = devices.find((d) => d.isActive);
+      if (!active) {
+        return reply.status(400).send({
+          error: 'NO_DEVICE',
+          message: 'No active Spotify device found. Open Spotify on a device first.',
+        });
+      }
+      await engine.start(active.id, active.name, false);
+    } else {
+      await engine.start(body.deviceId, body.deviceName, false);
+    }
+
+    return { success: true, state: engine.getState() };
+  });
+
+  /**
+   * POST /api/playback/stop
+   * Manually stop the engine and end the session.
+   */
+  fastify.post('/stop', async (_request, reply) => {
+    if (!engine.isRunning()) {
+      return reply.status(400).send({
+        error: 'ENGINE_NOT_RUNNING',
+        message: 'Playback engine is not running',
+      });
+    }
+
+    engine.stop();
+    return { success: true };
+  });
+
+  /**
    * GET /api/playback/library/stats
    * Get library cache statistics.
    */
