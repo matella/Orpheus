@@ -58,7 +58,7 @@ export function wireEngineEvents(): void {
   });
 }
 
-function broadcast(message: object): void {
+export function broadcast(message: object): void {
   const json = JSON.stringify(message);
   for (const client of clients) {
     safeSend(client, json);
