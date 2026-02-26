@@ -137,6 +137,70 @@ class ApiService {
     final response = await _dio.post('/ai/analyze');
     return response.data;
   }
+
+  // --- Sessions ---
+
+  /// Get paginated session history
+  Future<Map<String, dynamic>> getSessions({int limit = 20, int offset = 0}) async {
+    final response = await _dio.get('/sessions', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    return response.data;
+  }
+
+  /// Get the active session with tracks and state curve
+  Future<Map<String, dynamic>> getActiveSession() async {
+    final response = await _dio.get('/sessions/active');
+    return response.data;
+  }
+
+  /// Get a specific session by ID with tracks and state curve
+  Future<Map<String, dynamic>> getSessionDetail(int sessionId) async {
+    final response = await _dio.get('/sessions/$sessionId');
+    return response.data;
+  }
+
+  // --- Analytics ---
+
+  /// Get overview analytics (cached on server)
+  Future<Map<String, dynamic>> getAnalyticsOverview() async {
+    final response = await _dio.get('/analytics/overview');
+    return response.data;
+  }
+
+  /// Get genre distribution
+  Future<Map<String, dynamic>> getAnalyticsGenres({int days = 30}) async {
+    final response = await _dio.get('/analytics/genres', queryParameters: {'days': days});
+    return response.data;
+  }
+
+  /// Get energy trend data
+  Future<Map<String, dynamic>> getAnalyticsEnergy({int days = 30}) async {
+    final response = await _dio.get('/analytics/energy', queryParameters: {'days': days});
+    return response.data;
+  }
+
+  /// Get listening hours heatmap
+  Future<Map<String, dynamic>> getAnalyticsHours({int days = 30}) async {
+    final response = await _dio.get('/analytics/hours', queryParameters: {'days': days});
+    return response.data;
+  }
+
+  /// Get top tracks
+  Future<Map<String, dynamic>> getAnalyticsTopTracks({int days = 30, int limit = 20}) async {
+    final response = await _dio.get('/analytics/top-tracks', queryParameters: {
+      'days': days,
+      'limit': limit,
+    });
+    return response.data;
+  }
+
+  /// Get daily listening stats for sparklines
+  Future<Map<String, dynamic>> getAnalyticsDaily({int days = 30}) async {
+    final response = await _dio.get('/analytics/daily', queryParameters: {'days': days});
+    return response.data;
+  }
 }
 
 /// Global API service instance

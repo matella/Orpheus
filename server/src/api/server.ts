@@ -8,6 +8,8 @@ import { playbackRoutes } from './routes/playback.routes.js';
 import { steeringRoutes } from './routes/steering.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
+import { sessionRoutes } from './routes/session.routes.js';
+import { analyticsRoutes } from './routes/analytics.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
 
 export async function buildServer() {
@@ -41,6 +43,8 @@ export async function buildServer() {
   await server.register(steeringRoutes, { prefix: '/api/steering' });
   await server.register(settingsRoutes, { prefix: '/api/settings' });
   await server.register(aiRoutes, { prefix: '/api/ai' });
+  await server.register(sessionRoutes, { prefix: '/api/sessions' });
+  await server.register(analyticsRoutes, { prefix: '/api/analytics' });
 
   return server;
 }

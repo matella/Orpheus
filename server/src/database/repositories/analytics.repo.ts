@@ -173,3 +173,91 @@ export function getCacheValue<T>(key: string): T | null {
   if (!row) return null;
   return JSON.parse(row.value) as T;
 }
+
+/**
+ * Get session interactions joined with track details.
+ */
+export function getSessionInteractionsWithTracks(sessionId: number): {
+  interactionId: number;
+  trackId: number;
+  spotifyId: string;
+  name: string;
+  artist: string;
+  album: string | null;
+  albumArtUrl: string | null;
+  durationMs: number;
+  energy: number | null;
+  valence: number | null;
+  interactionType: string;
+  listenDurationMs: number | null;
+  completionRatio: number | null;
+  createdAt: string;
+}[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      i.id as interactionId,
+      t.id as trackId,
+      t.spotify_id as spotifyId,
+      t.name,
+      t.artist,
+      t.album,
+      t.album_art_url as albumArtUrl,
+      t.duration_ms as durationMs,
+      t.energy,
+      t.valence,
+      i.interaction_type as interactionType,
+      i.listen_duration_ms as listenDurationMs,
+      i.completion_ratio as completionRatio,
+      i.created_at as createdAt
+    FROM interactions i
+    JOIN tracks t ON i.track_id = t.id
+    WHERE i.session_id = ?
+    ORDER BY i.created_at ASC
+  `).all(sessionId) as {
+    interactionId: number;
+    trackId: number;
+    spotifyId: string;
+    name: string;
+    artist: string;
+    album: string | null;
+    albumArtUrl: string | null;
+    durationMs: number;
+    energy: number | null;
+    valence: number | null;
+    interactionType: string;
+    listenDurationMs: number | null;
+    completionRatio: number | null;
+    createdAt: string;
+  }[];
+}
+
+/**
+ * Get daily listening stats for sparklines and trend charts.
+ */
+export function getDailyListeningStats(daysBack: number = 30): {
+  date: string;
+  totalMs: number;
+  trackCount: number;
+  avgEnergy: number | null;
+}[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      DATE(i.created_at) as date,
+      COALESCE(SUM(i.listen_duration_ms), 0) as totalMs,
+      COUNT(*) as trackCount,
+      AVG(t.energy) as avgEnergy
+    FROM interactions i
+    LEFT JOIN tracks t ON i.track_id = t.id
+    WHERE i.interaction_type = 'play'
+      AND i.created_at >= datetime('now', ?)
+    GROUP BY DATE(i.created_at)
+    ORDER BY date ASC
+  `).all(`-${daysBack} days`) as {
+    date: string;
+    totalMs: number;
+    trackCount: number;
+    avgEnergy: number | null;
+  }[];
+}

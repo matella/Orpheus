@@ -4,6 +4,7 @@ import { runMigrations } from './database/migrations.js';
 import { startServer } from './api/server.js';
 import { registerLibrarySyncTasks } from './scheduler/tasks/sync-library.js';
 import { registerPlayerPollTask } from './scheduler/tasks/poll-player.js';
+import { registerAnalyticsComputeTask } from './scheduler/tasks/compute-analytics.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { engine } from './playback/engine.js';
 
@@ -22,6 +23,7 @@ async function main() {
   // Register and start scheduled tasks
   registerLibrarySyncTasks();
   registerPlayerPollTask();
+  registerAnalyticsComputeTask();
   startScheduler();
 
   logger.info('Orpheus is ready');
