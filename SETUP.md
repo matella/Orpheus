@@ -31,10 +31,12 @@ If you need to install/upgrade Node.js: https://nodejs.org/
 4. Fill in:
    - **App name:** Orpheus (or anything you like)
    - **App description:** Autonomous music intelligence
-   - **Redirect URI:** `http://localhost:3000/api/auth/callback`
+   - **Redirect URI:** `http://127.0.0.1:3000/api/auth/callback`
    - **APIs used:** Check **Web API** and **Web Playback SDK**
 5. Click **Save**
 6. Open your app's settings and note the **Client ID** and **Client Secret**
+
+> **Note:** Spotify requires HTTPS for redirect URIs except for loopback addresses (`127.0.0.1`). Do not use `localhost` — use `127.0.0.1` instead.
 
 ---
 
@@ -57,7 +59,7 @@ Edit `.env` with your Spotify credentials:
 # Required
 SPOTIFY_CLIENT_ID=your_client_id_here
 SPOTIFY_CLIENT_SECRET=your_client_secret_here
-SPOTIFY_REDIRECT_URI=http://localhost:3000/api/auth/callback
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:3000/api/auth/callback
 
 # Server (defaults are fine for local development)
 PORT=3000
@@ -76,7 +78,7 @@ LOG_LEVEL=info
 |----------|----------|---------|-------------|
 | `SPOTIFY_CLIENT_ID` | Yes | — | From Spotify Developer Dashboard |
 | `SPOTIFY_CLIENT_SECRET` | Yes | — | From Spotify Developer Dashboard |
-| `SPOTIFY_REDIRECT_URI` | No | `http://localhost:3000/api/auth/callback` | Must match Spotify app settings |
+| `SPOTIFY_REDIRECT_URI` | No | `http://127.0.0.1:3000/api/auth/callback` | Must match Spotify app settings |
 | `PORT` | No | `3000` | Server port |
 | `HOST` | No | `0.0.0.0` | Server bind address |
 | `DB_PATH` | No | `./data/orpheus.db` | SQLite database file path |
@@ -110,7 +112,7 @@ The database and `data/` directory are created automatically on first run.
 ### Verify the server is running
 
 ```bash
-curl http://localhost:3000/api/health
+curl http://127.0.0.1:3000/api/health
 # {"status":"ok","service":"orpheus","timestamp":"..."}
 ```
 
@@ -120,17 +122,17 @@ curl http://localhost:3000/api/health
 
 1. Open your browser and go to:
    ```
-   http://localhost:3000/api/auth/login
+   http://127.0.0.1:3000/api/auth/login
    ```
 2. This redirects you to Spotify's authorization page
 3. Click **Agree** to grant Orpheus access
-4. You'll be redirected back to `localhost:3000/api/auth/callback`
+4. You'll be redirected back to `http://127.0.0.1:3000/api/auth/callback`
 5. The server stores your access and refresh tokens in the database
 
 ### Verify authentication
 
 ```bash
-curl http://localhost:3000/api/auth/status
+curl http://127.0.0.1:3000/api/auth/status
 # {"authenticated":true,"user":{...}}
 ```
 
@@ -149,7 +151,7 @@ Edit `client/lib/config/constants.dart` if your server is running on a different
 
 ```dart
 const apiBaseUrl = 'http://localhost:3000/api';
-const wsBaseUrl = 'ws://localhost:3000/api/ws';
+const wsBaseUrl = 'ws://localhost:3000/ws';
 ```
 
 If running on a physical device, use your machine's local IP address instead of `localhost`.
@@ -253,7 +255,7 @@ You need Node.js 24 or later. The `node:sqlite` module is built-in starting from
 
 ### Server starts but auth fails
 
-Make sure the redirect URI in your Spotify Developer Dashboard exactly matches `SPOTIFY_REDIRECT_URI` in your `.env` file. The default is `http://localhost:3000/api/auth/callback`.
+Make sure the redirect URI in your Spotify Developer Dashboard exactly matches `SPOTIFY_REDIRECT_URI` in your `.env` file. The default is `http://127.0.0.1:3000/api/auth/callback`. Spotify requires `127.0.0.1` (not `localhost`) for local development.
 
 ### Playback doesn't start
 

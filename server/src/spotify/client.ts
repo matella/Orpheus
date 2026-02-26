@@ -46,5 +46,11 @@ export async function spotifyFetch<T>(
     );
   }
 
+  // Some endpoints (e.g. /me/player/queue) may return non-JSON or empty bodies
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 }

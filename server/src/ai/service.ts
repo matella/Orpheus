@@ -22,12 +22,14 @@ import {
   buildSessionRecapPrompt,
   buildMonthlyRecapPrompt,
   buildContextInferencePrompt,
+  buildPromptParsePrompt,
   type WeightSuggestion,
   type SessionNameSuggestion,
   type InsightSuggestion,
   type SessionRecapSuggestion,
   type MonthlyRecapSuggestion,
   type ContextInferenceSuggestion,
+  type ParsedMusicRequest,
   type SessionContext,
   type SessionRecapContext,
   type MonthlyRecapContext,
@@ -467,6 +469,36 @@ export async function inferContextViaAi(
     return result;
   } catch (err) {
     logger.warn({ err }, 'AI context inference failed');
+    return null;
+  }
+}
+
+/**
+ * Parse a natural language music request via AI.
+ * Returns null if AI is unavailable or parsing fails (caller should use keyword fallback).
+ */
+export async function parseUserMusicRequest(
+  prompt: string,
+): Promise<ParsedMusicRequest | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const aiPrompt = buildPromptParsePrompt(prompt);
+    const result = await generateJson<ParsedMusicRequest>(aiPrompt, { timeout: 10000 });
+
+    if (!result) return null;
+
+    // Validate and normalize shape
+    return {
+      artists: Array.isArray(result.artists) ? result.artists.map(String) : [],
+      genres: Array.isArray(result.genres) ? result.genres.map(String) : [],
+      moods: Array.isArray(result.moods) ? result.moods.map(String) : [],
+      descriptors: Array.isArray(result.descriptors) ? result.descriptors.map(String) : [],
+      trackCount: typeof result.trackCount === 'number' ? result.trackCount : 5,
+      searchSpotify: result.searchSpotify ?? true,
+    };
+  } catch (err) {
+    logger.warn({ err }, 'AI music request parsing failed');
     return null;
   }
 }

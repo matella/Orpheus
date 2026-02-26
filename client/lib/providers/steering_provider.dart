@@ -15,10 +15,14 @@ const Map<String, double> _defaultSteering = {
 };
 
 /// Manages steering control state with debounced API updates.
-class SteeringNotifier extends StateNotifier<Map<String, double>> {
-  SteeringNotifier() : super({..._defaultSteering});
-
+class SteeringNotifier extends Notifier<Map<String, double>> {
   Timer? _debounceTimer;
+
+  @override
+  Map<String, double> build() {
+    ref.onDispose(() => _debounceTimer?.cancel());
+    return {..._defaultSteering};
+  }
 
   /// Load current steering controls from the server.
   Future<void> load() async {
@@ -57,16 +61,10 @@ class SteeringNotifier extends StateNotifier<Map<String, double>> {
       // Silently fail — user sees local state immediately
     }
   }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    super.dispose();
-  }
 }
 
 /// Global steering controls provider.
 final steeringProvider =
-    StateNotifierProvider<SteeringNotifier, Map<String, double>>(
-  (ref) => SteeringNotifier(),
+    NotifierProvider<SteeringNotifier, Map<String, double>>(
+  SteeringNotifier.new,
 );

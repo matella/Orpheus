@@ -5,7 +5,7 @@ import { fullLibrarySync, syncRecentlyPlayed, syncAudioFeatures } from '../../sp
  * Register library sync tasks with the scheduler.
  *
  * - Full sync: every 6 hours (saves tracks + top tracks + recent + audio features)
- * - Recent sync: every 30 minutes (recently played + new audio features)
+ * - Recent sync: every 15 minutes (recently played + new audio features)
  */
 export function registerLibrarySyncTasks(): void {
   // Full library sync every 6 hours
@@ -18,10 +18,10 @@ export function registerLibrarySyncTasks(): void {
     runOnStart: true, // Sync on server startup
   });
 
-  // Recently played sync every 30 minutes
+  // Recently played sync every 15 minutes
   registerTask({
     name: 'recent-tracks-sync',
-    schedule: '*/30 * * * *', // Every 30 minutes
+    schedule: '*/15 * * * *', // Every 15 minutes
     handler: async () => {
       await syncRecentlyPlayed();
       await syncAudioFeatures();

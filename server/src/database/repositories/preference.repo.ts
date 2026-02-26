@@ -46,17 +46,19 @@ export function updatePreference(trackId: number, delta: number): void {
 
 /**
  * Record a play event (increment play count, update last_played_at).
+ * @param playedAt Optional ISO timestamp for historical imports (defaults to now).
  */
-export function recordPlay(trackId: number): void {
+export function recordPlay(trackId: number, playedAt?: string): void {
   const db = getDb();
+  const ts = playedAt ?? new Date().toISOString();
   db.prepare(`
     INSERT INTO preferences (track_id, play_count, last_played_at, updated_at)
-    VALUES (?, 1, datetime('now'), datetime('now'))
+    VALUES (?, 1, ?, datetime('now'))
     ON CONFLICT(track_id) DO UPDATE SET
       play_count = play_count + 1,
-      last_played_at = datetime('now'),
+      last_played_at = MAX(last_played_at, ?),
       updated_at = datetime('now')
-  `).run(trackId);
+  `).run(trackId, ts, ts);
 }
 
 /**
@@ -108,5 +110,5 @@ export function getTopPreferences(limit: number = 50): PreferenceRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM preferences ORDER BY score DESC LIMIT ?',
-  ).all(limit) as PreferenceRow[];
+  ).all(limit) as unknown as PreferenceRow[];
 }

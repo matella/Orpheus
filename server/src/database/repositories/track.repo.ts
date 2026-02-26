@@ -171,7 +171,7 @@ export function getTracksWithFeatures(limit?: number): TrackRow[] {
   const sql = limit
     ? 'SELECT * FROM tracks WHERE features_fetched = 1 ORDER BY cached_at DESC LIMIT ?'
     : 'SELECT * FROM tracks WHERE features_fetched = 1 ORDER BY cached_at DESC';
-  return (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as TrackRow[];
+  return (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as unknown as TrackRow[];
 }
 
 /**
@@ -229,5 +229,159 @@ export function getRandomTracks(limit: number): TrackRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM tracks WHERE features_fetched = 1 ORDER BY RANDOM() LIMIT ?',
-  ).all(limit) as TrackRow[];
+  ).all(limit) as unknown as TrackRow[];
+}
+
+/**
+ * Get distinct artist IDs for tracks that don't have a genre_cluster set.
+ */
+export function getArtistIdsMissingGenres(limit: number = 50): string[] {
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL AND genre_cluster IS NULL LIMIT ?',
+  ).all(limit) as { artist_id: string }[];
+  return rows.map((r) => r.artist_id);
+}
+
+/**
+ * Set genre_cluster for all tracks by a given artist (only where genre is currently NULL).
+ */
+export function setGenreClusterByArtist(artistId: string, genre: string): number {
+  const db = getDb();
+  const result = db.prepare(
+    'UPDATE tracks SET genre_cluster = ? WHERE artist_id = ? AND genre_cluster IS NULL',
+  ).run(genre, artistId);
+  return Number(result.changes);
+}
+
+/**
+ * Mark all unfetched tracks with neutral default audio features.
+ * Used when Spotify's audio-features endpoint is unavailable (403).
+ * Returns the number of tracks updated.
+ */
+export function markTracksWithDefaultFeatures(): number {
+  const db = getDb();
+  const result = db.prepare(`
+    UPDATE tracks SET
+      energy = 0.5,
+      valence = 0.5,
+      tempo = 120,
+      danceability = 0.5,
+      acousticness = 0.5,
+      instrumentalness = 0.1,
+      loudness = -10,
+      speechiness = 0.1,
+      key = 0,
+      mode = 1,
+      time_signature = 4,
+      aggressiveness = 0.5,
+      features_fetched = 1
+    WHERE features_fetched = 0
+  `).run();
+  return Number(result.changes);
+}
+
+// ── Library Search ───────────────────────────────────────────────
+
+export interface LibrarySearchParams {
+  artists: string[];
+  genres: string[];
+  moods: string[];
+  limit: number;
+}
+
+/**
+ * Search the local track library using multiple criteria.
+ * Uses LIKE for fuzzy matching on artist/genre, and feature ranges for moods.
+ */
+export function searchLibraryTracks(params: LibrarySearchParams): TrackRow[] {
+  const db = getDb();
+  const conditions: string[] = ['features_fetched = 1'];
+  const bindings: (string | number)[] = [];
+
+  // Artist filter (OR across artists, LIKE match)
+  if (params.artists.length > 0) {
+    const clauses = params.artists.map(() => 'LOWER(artist) LIKE ?');
+    conditions.push(`(${clauses.join(' OR ')})`);
+    for (const a of params.artists) {
+      bindings.push(`%${a.toLowerCase()}%`);
+    }
+  }
+
+  // Genre filter (OR across genres, LIKE match on genre_cluster)
+  if (params.genres.length > 0) {
+    const clauses = params.genres.map(() => 'LOWER(genre_cluster) LIKE ?');
+    conditions.push(`(${clauses.join(' OR ')})`);
+    for (const g of params.genres) {
+      bindings.push(`%${g.toLowerCase()}%`);
+    }
+  }
+
+  // Mood-to-feature mapping
+  if (params.moods.length > 0) {
+    const moodConditions = mapMoodsToFeatureConditions(params.moods);
+    if (moodConditions.length > 0) {
+      conditions.push(`(${moodConditions.join(' AND ')})`);
+    }
+  }
+
+  const sql = `
+    SELECT * FROM tracks
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY RANDOM()
+    LIMIT ?
+  `;
+  bindings.push(params.limit);
+
+  return db.prepare(sql).all(...bindings) as unknown as TrackRow[];
+}
+
+function mapMoodsToFeatureConditions(moods: string[]): string[] {
+  const conditions: string[] = [];
+
+  for (const mood of moods) {
+    switch (mood.toLowerCase()) {
+      case 'chill':
+      case 'relaxed':
+      case 'calm':
+      case 'mellow':
+      case 'peaceful':
+        conditions.push('energy < 0.45');
+        break;
+      case 'energetic':
+      case 'hype':
+      case 'upbeat':
+      case 'pump':
+        conditions.push('energy > 0.65');
+        break;
+      case 'happy':
+      case 'bright':
+      case 'cheerful':
+        conditions.push('valence > 0.6');
+        break;
+      case 'sad':
+      case 'melancholy':
+      case 'somber':
+        conditions.push('valence < 0.35');
+        break;
+      case 'aggressive':
+      case 'angry':
+      case 'hard':
+        conditions.push('energy > 0.7');
+        conditions.push('aggressiveness > 0.6');
+        break;
+      case 'focus':
+      case 'study':
+        conditions.push('energy BETWEEN 0.2 AND 0.55');
+        conditions.push('instrumentalness > 0.3');
+        break;
+      case 'party':
+      case 'dance':
+        conditions.push('danceability > 0.65');
+        conditions.push('energy > 0.6');
+        break;
+    }
+  }
+
+  return conditions;
 }

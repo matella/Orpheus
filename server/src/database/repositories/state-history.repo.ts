@@ -46,7 +46,7 @@ export function getStateHistory(sessionId: number): StateHistoryRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM state_history WHERE session_id = ? ORDER BY recorded_at ASC',
-  ).all(sessionId) as StateHistoryRow[];
+  ).all(sessionId) as unknown as StateHistoryRow[];
 }
 
 /**

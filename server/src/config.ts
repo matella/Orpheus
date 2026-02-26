@@ -33,7 +33,7 @@ function loadConfig(): Config {
     spotify: {
       clientId: process.env.SPOTIFY_CLIENT_ID ?? '',
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET ?? '',
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI ?? 'http://localhost:3000/api/auth/callback',
+      redirectUri: process.env.SPOTIFY_REDIRECT_URI ?? 'http://127.0.0.1:3000/api/auth/callback',
     },
     server: {
       port: parseInt(process.env.PORT ?? '3000', 10),

@@ -27,6 +27,7 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
   if (steering.familiarity < 0.4) {
     weights.novelty *= 1.4;
     weights.preference *= 0.6;
+    weights.recency *= 2.0; // Boost recency in explore mode — favors unplayed tracks
   }
   if (steering.genreOpenness < 0.4) {
     weights.transition *= 1.3;
@@ -80,15 +81,17 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
   const prefRow = getPreference(track.id);
   const preference = prefRow?.score ?? 0.5;
 
-  // --- novelty ---
-  // Use artist diversity as a proxy for genre diversity (genre data not available in context)
+  // --- novelty: use actual play count for familiarity instead of static score ---
+  const playCount = prefRow?.play_count ?? 0;
+  const familiarityFromPlays = Math.min(1, playCount / 20); // 20 plays = fully familiar
   const genreDiversityBonus =
     track.genre_cluster &&
     !context.recentArtists.some((a) => a === track.artist)
       ? 1
       : 0;
+  const neverPlayedBonus = playCount === 0 ? 0.3 : 0;
   let novelty =
-    (1 - track.familiarity_score) * 0.7 + genreDiversityBonus * 0.3;
+    (1 - familiarityFromPlays) * 0.5 + genreDiversityBonus * 0.2 + neverPlayedBonus;
 
   const skipRatio =
     context.sessionSkipCount / Math.max(1, context.sessionTrackCount);

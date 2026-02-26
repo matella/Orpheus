@@ -19,7 +19,7 @@ export function getAllMonthlyRecaps(limit: number = 12): MonthlyRecapRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM monthly_recaps ORDER BY year DESC, month DESC LIMIT ?',
-  ).all(limit) as MonthlyRecapRow[];
+  ).all(limit) as unknown as MonthlyRecapRow[];
 }
 
 /**

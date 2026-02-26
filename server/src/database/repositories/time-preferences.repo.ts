@@ -31,7 +31,7 @@ export function getAllTimePreferences(): TimePreferencesRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM time_preferences ORDER BY hour_bracket',
-  ).all() as TimePreferencesRow[];
+  ).all() as unknown as TimePreferencesRow[];
 }
 
 /**

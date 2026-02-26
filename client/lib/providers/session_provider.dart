@@ -38,8 +38,9 @@ class SessionState {
   }
 }
 
-class SessionNotifier extends StateNotifier<SessionState> {
-  SessionNotifier() : super(const SessionState());
+class SessionNotifier extends Notifier<SessionState> {
+  @override
+  SessionState build() => const SessionState();
 
   Future<void> loadActiveSession() async {
     state = state.copyWith(isLoading: true);
@@ -74,6 +75,6 @@ class SessionNotifier extends StateNotifier<SessionState> {
   }
 }
 
-final sessionProvider = StateNotifierProvider<SessionNotifier, SessionState>(
-  (ref) => SessionNotifier(),
+final sessionProvider = NotifierProvider<SessionNotifier, SessionState>(
+  SessionNotifier.new,
 );

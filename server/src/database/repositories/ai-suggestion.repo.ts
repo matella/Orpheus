@@ -35,12 +35,12 @@ export function getAiSuggestions(sessionId?: number, limit: number = 20): AiSugg
   if (sessionId !== undefined) {
     return db.prepare(
       'SELECT * FROM ai_suggestions WHERE session_id = ? ORDER BY created_at DESC LIMIT ?',
-    ).all(sessionId, limit) as AiSuggestionRow[];
+    ).all(sessionId, limit) as unknown as AiSuggestionRow[];
   }
 
   return db.prepare(
     'SELECT * FROM ai_suggestions ORDER BY created_at DESC LIMIT ?',
-  ).all(limit) as AiSuggestionRow[];
+  ).all(limit) as unknown as AiSuggestionRow[];
 }
 
 /**

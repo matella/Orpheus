@@ -30,7 +30,7 @@ export async function registerWebSocket(server: FastifyInstance): Promise<void> 
       logger.debug({ clientCount: clients.size }, 'WebSocket client disconnected');
     });
 
-    socket.on('error', (err) => {
+    socket.on('error', (err: Error) => {
       logger.warn({ err }, 'WebSocket client error');
       clients.delete(socket);
     });

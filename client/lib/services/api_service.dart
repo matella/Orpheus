@@ -9,7 +9,6 @@ class ApiService {
       baseUrl: baseUrl ?? apiBaseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
-      headers: {'Content-Type': 'application/json'},
     ));
 
     _dio.interceptors.add(LogInterceptor(
@@ -54,6 +53,11 @@ class ApiService {
   /// Skip current track
   Future<void> skipTrack() async {
     await _dio.post('/playback/skip');
+  }
+
+  /// Go to previous track
+  Future<void> previousTrack() async {
+    await _dio.post('/playback/previous');
   }
 
   /// Pause playback
@@ -114,6 +118,26 @@ class ApiService {
   /// Manually stop the playback engine
   Future<void> stopEngine() async {
     await _dio.post('/playback/stop');
+  }
+
+  /// Get library stats (track count, features fetched)
+  Future<Map<String, dynamic>> getLibraryStats() async {
+    final response = await _dio.get('/playback/library/stats');
+    return response.data;
+  }
+
+  /// Manually trigger a full library sync
+  Future<Map<String, dynamic>> syncLibrary() async {
+    final response = await _dio.post('/playback/library/sync');
+    return response.data;
+  }
+
+  // --- Music Request ---
+
+  /// Send a natural language music request to queue matching tracks
+  Future<Map<String, dynamic>> sendMusicRequest(String prompt) async {
+    final response = await _dio.post('/playback/request', data: {'prompt': prompt});
+    return response.data;
   }
 
   // --- AI Integration ---

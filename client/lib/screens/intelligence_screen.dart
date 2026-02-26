@@ -113,14 +113,20 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
             Row(
               children: [
                 Icon(
-                  enabled && reachable ? Icons.auto_awesome : Icons.auto_awesome_outlined,
-                  color: enabled && reachable ? OrpheusColors.lyreGold : OrpheusColors.mist,
+                  enabled && reachable
+                      ? Icons.auto_awesome
+                      : Icons.auto_awesome_outlined,
+                  color: enabled && reachable
+                      ? OrpheusColors.lyreGold
+                      : OrpheusColors.mist,
                 ),
                 const SizedBox(width: 12),
-                Text('AI Status', style: Theme.of(context).textTheme.titleLarge),
+                Text('AI Status',
+                    style: Theme.of(context).textTheme.titleLarge),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: enabled && reachable
                         ? OrpheusColors.laurelGreen.withValues(alpha: 0.2)
@@ -132,7 +138,9 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: enabled && reachable ? OrpheusColors.laurelGreen : OrpheusColors.wineRed,
+                      color: enabled && reachable
+                          ? OrpheusColors.laurelGreen
+                          : OrpheusColors.wineRed,
                     ),
                   ),
                 ),
@@ -185,10 +193,12 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                     onPressed: _isAnalyzing ? null : _triggerAnalysis,
                     icon: _isAnalyzing
                         ? const SizedBox(
-                            width: 16, height: 16,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.psychology, size: 18),
-                    label: Text(_isAnalyzing ? 'Analyzing...' : 'Analyze Session'),
+                    label:
+                        Text(_isAnalyzing ? 'Analyzing...' : 'Analyze Session'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -197,10 +207,12 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                     onPressed: _isGeneratingRecap ? null : _generateRecap,
                     icon: _isGeneratingRecap
                         ? const SizedBox(
-                            width: 16, height: 16,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.auto_stories, size: 18),
-                    label: Text(_isGeneratingRecap ? 'Generating...' : 'Monthly Recap'),
+                    label: Text(
+                        _isGeneratingRecap ? 'Generating...' : 'Monthly Recap'),
                   ),
                 ),
               ],
@@ -225,9 +237,11 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.lightbulb_outline, color: OrpheusColors.lyreGold, size: 20),
+                const Icon(Icons.lightbulb_outline,
+                    color: OrpheusColors.lyreGold, size: 20),
                 const SizedBox(width: 8),
-                Text('Recent Insights', style: Theme.of(context).textTheme.titleLarge),
+                Text('Recent Insights',
+                    style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
             const SizedBox(height: 12),
@@ -252,11 +266,12 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(insight, style: Theme.of(context).textTheme.bodyMedium),
+                            Text(insight,
+                                style: Theme.of(context).textTheme.bodyMedium),
                             const SizedBox(height: 2),
                             Text(
                               category,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 10,
                                 color: OrpheusColors.lyreGold,
                                 fontWeight: FontWeight.w600,
@@ -285,9 +300,11 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_stories, color: OrpheusColors.lyreGold, size: 20),
+                const Icon(Icons.auto_stories,
+                    color: OrpheusColors.lyreGold, size: 20),
                 const SizedBox(width: 8),
-                Text('Monthly Recaps', style: Theme.of(context).textTheme.titleLarge),
+                Text('Monthly Recaps',
+                    style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
             const SizedBox(height: 12),
@@ -299,8 +316,19 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
             else
               ..._recaps.map((r) {
                 final monthNames = [
-                  '', 'January', 'February', 'March', 'April', 'May', 'June',
-                  'July', 'August', 'September', 'October', 'November', 'December'
+                  '',
+                  'January',
+                  'February',
+                  'March',
+                  'April',
+                  'May',
+                  'June',
+                  'July',
+                  'August',
+                  'September',
+                  'October',
+                  'November',
+                  'December'
                 ];
                 final monthName = monthNames[r['month'] ?? 1];
                 final year = r['year'] ?? 2026;
@@ -334,9 +362,11 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                             ),
                             if (personality.isNotEmpty)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: OrpheusColors.lyreGold.withValues(alpha: 0.15),
+                                  color: OrpheusColors.lyreGold
+                                      .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -359,11 +389,15 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              _miniStat('${(stats['totalHours'] as num).toStringAsFixed(1)}h', 'listened'),
+                              _miniStat(
+                                  '${(stats['totalHours'] as num).toStringAsFixed(1)}h',
+                                  'listened'),
                               const SizedBox(width: 16),
-                              _miniStat('${stats['totalTracks'] ?? 0}', 'tracks'),
+                              _miniStat(
+                                  '${stats['totalTracks'] ?? 0}', 'tracks'),
                               const SizedBox(width: 16),
-                              _miniStat('${stats['totalSessions'] ?? 0}', 'sessions'),
+                              _miniStat(
+                                  '${stats['totalSessions'] ?? 0}', 'sessions'),
                             ],
                           ),
                         ],
@@ -402,16 +436,19 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.history, color: OrpheusColors.lyreGold, size: 20),
+                const Icon(Icons.history,
+                    color: OrpheusColors.lyreGold, size: 20),
                 const SizedBox(width: 8),
-                Text('AI History', style: Theme.of(context).textTheme.titleLarge),
+                Text('AI History',
+                    style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
             const SizedBox(height: 12),
 
             // Session names
             if (names.isNotEmpty) ...[
-              Text('Session Names', style: Theme.of(context).textTheme.labelMedium),
+              Text('Session Names',
+                  style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
@@ -420,7 +457,8 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                   final response = _parseResponse(s['response']);
                   final name = response?['name'] ?? 'Unnamed';
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: OrpheusColors.slate,
                       borderRadius: BorderRadius.circular(16),
@@ -441,7 +479,8 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
 
             // Session recaps
             if (recaps.isNotEmpty) ...[
-              Text('Session Recaps', style: Theme.of(context).textTheme.labelMedium),
+              Text('Session Recaps',
+                  style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 6),
               ...recaps.map((s) {
                 final response = _parseResponse(s['response']);
@@ -455,7 +494,7 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                       if (mood.isNotEmpty) ...[
                         Text(
                           mood,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 10,
                             color: OrpheusColors.lyreGold,
                             fontWeight: FontWeight.w600,
@@ -478,7 +517,8 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
 
             // Weight adjustments
             if (weights.isNotEmpty) ...[
-              Text('Weight Adjustments', style: Theme.of(context).textTheme.labelMedium),
+              Text('Weight Adjustments',
+                  style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 6),
               ...weights.map((s) {
                 final response = _parseResponse(s['response']);
@@ -488,7 +528,8 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.tune, size: 14, color: OrpheusColors.mist),
+                      const Icon(Icons.tune,
+                          size: 14, color: OrpheusColors.mist),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -524,7 +565,8 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
             color: OrpheusColors.lyreGold,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 9, color: OrpheusColors.mist)),
+        Text(label,
+            style: const TextStyle(fontSize: 9, color: OrpheusColors.mist)),
       ],
     );
   }

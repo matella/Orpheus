@@ -118,7 +118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(width: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: _isConnected
                       ? OrpheusColors.laurelGreen.withValues(alpha: 0.2)
@@ -191,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               value: _autoStartEnabled,
-              activeColor: OrpheusColors.lyreGold,
+              activeThumbColor: OrpheusColors.lyreGold,
               onChanged: (value) {
                 setState(() => _autoStartEnabled = value);
                 _saveSettings({'autoStartEnabled': value});
@@ -209,7 +210,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: OrpheusColors.onyx,
                     borderRadius: BorderRadius.circular(8),
@@ -270,8 +272,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                   child: Icon(
                     Icons.arrow_forward,
                     size: 16,
@@ -317,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               value: _aiEnabled,
-              activeColor: OrpheusColors.lyreGold,
+              activeThumbColor: OrpheusColors.lyreGold,
               onChanged: (value) {
                 setState(() => _aiEnabled = value);
                 _saveSettings({'aiEnabled': value});
@@ -335,7 +337,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: OrpheusColors.onyx,
                     borderRadius: BorderRadius.circular(8),

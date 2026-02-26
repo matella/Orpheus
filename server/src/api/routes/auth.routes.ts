@@ -12,11 +12,44 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/auth/login
-   * Get the Spotify authorization URL to start the OAuth flow.
+   * Start the Spotify OAuth flow. If already authenticated, show a success page.
    */
-  fastify.get('/login', async () => {
+  fastify.get('/login', async (_request, reply) => {
+    const { authenticated } = isAuthenticated();
+    if (authenticated) {
+      return reply.type('text/html').send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Orpheus - Already Authenticated</title>
+            <style>
+              body {
+                background: #0D0D0F;
+                color: #E8E6E1;
+                font-family: 'Inter', system-ui, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+              }
+              .container { text-align: center; }
+              h1 { color: #D4A843; font-family: 'Cinzel', serif; font-size: 2rem; }
+              p { color: #8A8A99; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Orpheus</h1>
+              <p>Already authenticated with Spotify. You can close this window.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
     const url = getAuthUrl();
-    return { url };
+    return reply.redirect(url);
   });
 
   /**

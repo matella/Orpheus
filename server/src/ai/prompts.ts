@@ -259,6 +259,41 @@ Respond with ONLY this JSON format:
 }`;
 }
 
+// ── Music Request Parsing ─────────────────────────────────────────
+
+export interface ParsedMusicRequest {
+  artists: string[];
+  genres: string[];
+  moods: string[];
+  descriptors: string[];
+  trackCount: number;
+  searchSpotify: boolean;
+}
+
+export function buildPromptParsePrompt(userPrompt: string): string {
+  return `You are a music request parser for an intelligent music player. Parse the user's natural language request into structured data.
+
+USER REQUEST: "${userPrompt}"
+
+Extract the following:
+- artists: Array of artist names mentioned (empty array if none)
+- genres: Array of music genres or subgenres mentioned (empty array if none). Normalize to lowercase.
+- moods: Array of mood/atmosphere descriptors (e.g., "chill", "energetic", "sad", "party", "focus"). Empty array if none.
+- descriptors: Array of special intent keywords like "new", "surprise", "discovery", "deep cuts", "popular". Empty array if none.
+- trackCount: How many tracks the user wants (default 5). Look for numeric hints like "a few" (3), "some" (5), or explicit numbers. Max 10.
+- searchSpotify: true if the request likely needs tracks beyond the user's library (specific artist requests, niche genres). false if it's a general mood/vibe request that the library likely covers.
+
+Respond with ONLY this JSON format:
+{
+  "artists": [],
+  "genres": [],
+  "moods": [],
+  "descriptors": [],
+  "trackCount": 5,
+  "searchSpotify": false
+}`;
+}
+
 export interface ContextInferenceInput {
   timeBracket: string;
   dayOfWeek: string;

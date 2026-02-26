@@ -27,16 +27,17 @@ class FeedbackButtons extends StatelessWidget {
           onTap: onDislike,
         ),
 
-        const SizedBox(width: 32),
-
-        // Skip forward
-        _FeedbackButton(
-          icon: Icons.skip_next_rounded,
-          color: OrpheusColors.ivory,
-          activeColor: OrpheusColors.ivory,
-          size: 56,
-          onTap: onSkip,
-        ),
+        // Skip forward (only shown if callback provided)
+        if (onSkip != null) ...[
+          const SizedBox(width: 32),
+          _FeedbackButton(
+            icon: Icons.skip_next_rounded,
+            color: OrpheusColors.ivory,
+            activeColor: OrpheusColors.ivory,
+            size: 56,
+            onTap: onSkip,
+          ),
+        ],
 
         const SizedBox(width: 32),
 

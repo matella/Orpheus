@@ -8,6 +8,8 @@ export interface RecordInteractionData {
   listenDurationMs?: number;
   completionRatio?: number;
   skipPositionMs?: number;
+  /** ISO timestamp override — used for historical imports (defaults to now). */
+  createdAt?: string;
 }
 
 /**
@@ -16,8 +18,8 @@ export interface RecordInteractionData {
 export function recordInteraction(data: RecordInteractionData): number {
   const db = getDb();
   const result = db.prepare(`
-    INSERT INTO interactions (track_id, session_id, interaction_type, listen_duration_ms, completion_ratio, skip_position_ms)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO interactions (track_id, session_id, interaction_type, listen_duration_ms, completion_ratio, skip_position_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.trackId,
     data.sessionId ?? null,
@@ -25,6 +27,7 @@ export function recordInteraction(data: RecordInteractionData): number {
     data.listenDurationMs ?? null,
     data.completionRatio ?? null,
     data.skipPositionMs ?? null,
+    data.createdAt ?? new Date().toISOString(),
   );
 
   return Number(result.lastInsertRowid);
@@ -37,7 +40,7 @@ export function getInteractionsForTrack(trackId: number, limit: number = 50): In
   const db = getDb();
   return db.prepare(
     'SELECT * FROM interactions WHERE track_id = ? ORDER BY created_at DESC LIMIT ?',
-  ).all(trackId, limit) as InteractionRow[];
+  ).all(trackId, limit) as unknown as InteractionRow[];
 }
 
 /**
@@ -47,7 +50,7 @@ export function getRecentInteractions(limit: number = 50): InteractionRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM interactions ORDER BY created_at DESC LIMIT ?',
-  ).all(limit) as InteractionRow[];
+  ).all(limit) as unknown as InteractionRow[];
 }
 
 /**
@@ -57,7 +60,7 @@ export function getSessionInteractions(sessionId: number): InteractionRow[] {
   const db = getDb();
   return db.prepare(
     'SELECT * FROM interactions WHERE session_id = ? ORDER BY created_at ASC',
-  ).all(sessionId) as InteractionRow[];
+  ).all(sessionId) as unknown as InteractionRow[];
 }
 
 /**

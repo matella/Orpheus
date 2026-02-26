@@ -1,5 +1,6 @@
 import type { TrackRow } from '../database/types.js';
 import { getTracksWithFeatures } from '../database/repositories/track.repo.js';
+import { getPreference } from '../database/repositories/preference.repo.js';
 import {
   BPM_PROXIMITY_THRESHOLD,
   ENERGY_PROXIMITY_THRESHOLD,
@@ -8,12 +9,14 @@ import {
 import { logger } from '../shared/logger.js';
 import type { ScoringContext } from './types.js';
 
+const DISCOVERY_POOL_FRACTION = 0.15;
+
 /**
  * Pre-filter the full track library down to a candidate pool before scoring.
  *
  * Applies exclusion rules (recently played, same artist) and proximity filters
- * (BPM, energy) relative to the current state vector. Falls back to relaxed
- * thresholds or no proximity filter if the pool would be too small.
+ * (BPM, energy) relative to the steering-adjusted target state. Falls back to
+ * relaxed thresholds or no proximity filter if the pool would be too small.
  */
 export function getCandidates(context: ScoringContext): TrackRow[] {
   const allTracks = getTracksWithFeatures();
@@ -42,7 +45,13 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
     return true;
   });
 
-  // Apply proximity filters at the given thresholds
+  // Compute steering-adjusted targets so proximity filtering respects user intent.
+  // Without this, steering energy to 0.9 while current state is 0.3 would only
+  // return candidates near 0.3, making steering ineffective.
+  const targetEnergy = context.stateVector.energy * 0.6 + context.steering.energy * 0.4;
+  const targetTempo = context.stateVector.tempo;
+
+  // Apply proximity filters at the given thresholds, using steering-adjusted targets
   const applyProximity = (
     tracks: TrackRow[],
     bpmThreshold: number,
@@ -50,10 +59,10 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
   ): TrackRow[] =>
     tracks.filter((track) => {
       const bpmDelta =
-        Math.abs(track.tempo! - context.stateVector.tempo) /
-        context.stateVector.tempo;
+        Math.abs(track.tempo! - targetTempo) /
+        Math.max(1, targetTempo);
       const energyDelta = Math.abs(
-        track.energy! - context.stateVector.energy,
+        track.energy! - targetEnergy,
       );
       return bpmDelta <= bpmThreshold && energyDelta <= energyThreshold;
     });
@@ -87,8 +96,40 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
     candidates = baseCandidates;
   }
 
+  // Discovery injection: ensure some never-played tracks are in the pool
+  const desiredDiscovery = Math.max(2, Math.ceil(candidates.length * DISCOVERY_POOL_FRACTION));
+  const candidateIdSet = new Set(candidates.map((t) => t.id));
+
+  const discoveryInPool = candidates.filter((t) => {
+    const pref = getPreference(t.id);
+    return !pref || pref.play_count === 0;
+  }).length;
+
+  if (discoveryInPool < desiredDiscovery) {
+    const neverPlayed = baseCandidates.filter((t) => {
+      if (candidateIdSet.has(t.id)) return false;
+      const pref = getPreference(t.id);
+      return !pref || pref.play_count === 0;
+    });
+
+    // Shuffle and pick random discovery candidates
+    for (let i = neverPlayed.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [neverPlayed[i], neverPlayed[j]] = [neverPlayed[j], neverPlayed[i]];
+    }
+
+    const toAdd = Math.min(neverPlayed.length, desiredDiscovery - discoveryInPool);
+    if (toAdd > 0) {
+      candidates.push(...neverPlayed.slice(0, toAdd));
+      logger.debug(
+        { injected: toAdd, totalDiscovery: discoveryInPool + toAdd },
+        'Discovery candidates injected into pool',
+      );
+    }
+  }
+
   logger.debug(
-    { total: allTracks.length, candidates: candidates.length },
+    { total: allTracks.length, candidates: candidates.length, targetEnergy: targetEnergy.toFixed(2) },
     'Candidate pool built',
   );
 

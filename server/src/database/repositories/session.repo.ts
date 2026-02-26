@@ -96,7 +96,7 @@ export function getSessionHistory(limit: number = 20, offset: number = 0): {
   const db = getDb();
   const sessions = db.prepare(
     'SELECT * FROM sessions ORDER BY started_at DESC LIMIT ? OFFSET ?',
-  ).all(limit, offset) as SessionRow[];
+  ).all(limit, offset) as unknown as SessionRow[];
   const total = (db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }).count;
   return { sessions, total };
 }

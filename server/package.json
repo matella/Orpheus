@@ -4,7 +4,7 @@
   "description": "Orpheus — Autonomous Adaptive Music Intelligence Server",
   "type": "module",
   "scripts": {
-    "dev": "tsx --conditions=node --experimental-sqlite watch src/index.ts",
+    "dev": "tsx --conditions=node --experimental-sqlite --watch src/index.ts",
     "start": "node --experimental-sqlite dist/index.js",
     "build": "tsc",
     "test": "vitest run",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^22.13.4",
     "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
