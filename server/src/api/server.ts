@@ -5,6 +5,7 @@ import { logger } from '../shared/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { playbackRoutes } from './routes/playback.routes.js';
+import { steeringRoutes } from './routes/steering.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
 
 export async function buildServer() {
@@ -35,6 +36,7 @@ export async function buildServer() {
   // Register route modules
   await server.register(authRoutes, { prefix: '/api/auth' });
   await server.register(playbackRoutes, { prefix: '/api/playback' });
+  await server.register(steeringRoutes, { prefix: '/api/steering' });
 
   return server;
 }

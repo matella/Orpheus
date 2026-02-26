@@ -117,8 +117,8 @@ class IntelligenceSelector {
     }
 
     this.recentArtists.unshift(track.artist);
-    if (this.recentArtists.length > 50) {
-      this.recentArtists.length = 50;
+    if (this.recentArtists.length > RECENTLY_PLAYED_EXCLUDE_COUNT) {
+      this.recentArtists.length = RECENTLY_PLAYED_EXCLUDE_COUNT;
     }
 
     this.sessionTrackCount++;

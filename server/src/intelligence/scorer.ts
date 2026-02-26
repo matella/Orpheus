@@ -1,8 +1,5 @@
 import type { TrackRow } from '../database/types.js';
-import {
-  getPreferenceScore,
-  getPreference,
-} from '../database/repositories/preference.repo.js';
+import { getPreference } from '../database/repositories/preference.repo.js';
 import {
   DEFAULT_WEIGHTS,
   SKIP_FATIGUE_THRESHOLD,
@@ -64,15 +61,12 @@ export function scoreTrack(track: TrackRow, context: ScoringContext): number {
   const distance = Math.sqrt(diffs.reduce((sum, d) => sum + d * d, 0));
   const stateSimilarity = Math.max(0, 1 - distance / 2);
 
-  // --- preference: stored score ---
-  const preference = getPreferenceScore(track.id);
+  // --- preference + recency: single DB query for both ---
+  const prefRow = getPreference(track.id);
+  const preference = prefRow?.score ?? 0.5;
 
   // --- novelty ---
-  const recentGenres = context.recentArtists
-    .slice(0, 10)
-    .map(() => null as string | null); // placeholder; derive from recent tracks
-  // We don't have access to recent track genre data here, so we approximate
-  // using the recentArtists list as a diversity signal.
+  // Use artist diversity as a proxy for genre diversity (genre data not available in context)
   const genreDiversityBonus =
     track.genre_cluster &&
     !context.recentArtists.some((a) => a === track.artist)
@@ -103,8 +97,7 @@ export function scoreTrack(track: TrackRow, context: ScoringContext): number {
     steering.focusVsParty,
   );
 
-  // --- recency: time since last played ---
-  const prefRow = getPreference(track.id);
+  // --- recency: time since last played (reuses prefRow from above) ---
   let recency = 1.0;
   if (prefRow?.last_played_at) {
     const lastPlayed = new Date(prefRow.last_played_at).getTime();
@@ -121,9 +114,6 @@ export function scoreTrack(track: TrackRow, context: ScoringContext): number {
     weights.fatigue * fatigue +
     weights.context * contextScore +
     weights.recency * recency;
-
-  // Suppress unused variable warning
-  void recentGenres;
 
   return score;
 }

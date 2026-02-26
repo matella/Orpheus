@@ -4,8 +4,9 @@ import { PLAYER_POLL_INTERVAL_MS } from '../shared/constants.js';
 import { sleep } from '../shared/utils.js';
 import { getPlayerState } from '../spotify/player.js';
 import { playTrack, addToQueue } from '../spotify/player.js';
-import { getRandomTracks } from '../database/repositories/track.repo.js';
+import { getRandomTracks, getTrackBySpotifyId } from '../database/repositories/track.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
+import { selector } from '../intelligence/selector.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
 import { TrackQueue } from './queue.js';
 import { SessionManager } from './session.js';
@@ -28,8 +29,8 @@ export interface EngineEvents {
  * Core loop: poll Spotify player state → detect track changes →
  * advance queue → select next track → repeat.
  *
- * Phase 3 uses random selection from the cached library.
- * Phase 5 will replace this with the full scoring algorithm.
+ * Uses the intelligence engine for scored track selection when a
+ * session is active, with a random fallback otherwise.
  */
 class PlaybackEngine extends EventEmitter {
   private queue = new TrackQueue();
@@ -66,6 +67,7 @@ class PlaybackEngine extends EventEmitter {
     });
 
     this.emit('session_started', { sessionId, deviceName: this.deviceName });
+    selector.initSession(sessionId);
     logger.info({ deviceId, deviceName }, 'Playback engine started');
 
     // Select and play the first track
@@ -88,6 +90,9 @@ class PlaybackEngine extends EventEmitter {
     }
 
     const sessionId = this.session.getSessionId();
+    if (sessionId) {
+      selector.endSession(sessionId);
+    }
     this.session.end({ trackCount: this.trackCount });
 
     if (sessionId) {
@@ -124,6 +129,17 @@ class PlaybackEngine extends EventEmitter {
         completionRatio: current.durationMs > 0 ? listenDuration / current.durationMs : 0,
         skipPositionMs: listenDuration,
       });
+
+      // Notify intelligence engine of skip
+      const sessionId = this.session.getSessionId();
+      if (sessionId) {
+        selector.onInteraction({
+          track_id: current.id,
+          interaction_type: 'skip',
+          listen_duration_ms: listenDuration,
+          completion_ratio: current.durationMs > 0 ? listenDuration / current.durationMs : 0,
+        });
+      }
     }
 
     // Advance the queue
@@ -213,6 +229,15 @@ class PlaybackEngine extends EventEmitter {
       interactionType: 'play',
     });
 
+    // Notify intelligence of first track
+    const sessionId = this.session.getSessionId();
+    if (sessionId) {
+      const trackRow = getTrackBySpotifyId(track.spotifyId);
+      if (trackRow) {
+        selector.onTrackPlayed(sessionId, trackRow);
+      }
+    }
+
     // Fill the rest of the queue
     await this.fillQueue();
 
@@ -246,15 +271,18 @@ class PlaybackEngine extends EventEmitter {
   }
 
   /**
-   * Select the next track to play.
-   *
-   * Phase 3: Random selection from cached library.
-   * Phase 5 will replace this with the full scoring algorithm.
+   * Select the next track to play using the intelligence engine.
+   * Falls back to random selection if no session is active.
    */
   private selectNextTrack(): PlaybackTrack | null {
-    const rows = getRandomTracks(1);
-    if (rows.length === 0) return null;
-    return toPlaybackTrack(rows[0]);
+    const sessionId = this.session.getSessionId();
+    if (!sessionId) {
+      // Fallback to random if no session
+      const rows = getRandomTracks(1);
+      return rows.length > 0 ? toPlaybackTrack(rows[0]) : null;
+    }
+    const selected = selector.selectNextTrack(sessionId);
+    return selected ? toPlaybackTrack(selected) : null;
   }
 
   /**
@@ -318,6 +346,17 @@ class PlaybackEngine extends EventEmitter {
         skipPositionMs: wasSkipped ? listenDuration : undefined,
       });
       this.session.recordTrack(listenDuration);
+
+      // Notify intelligence engine of interaction
+      const sessionId = this.session.getSessionId();
+      if (sessionId) {
+        selector.onInteraction({
+          track_id: previous.id,
+          interaction_type: wasSkipped ? 'skip' : 'play',
+          listen_duration_ms: listenDuration,
+          completion_ratio: completionRatio,
+        });
+      }
     }
 
     // Check if the new track is our expected next track
@@ -338,6 +377,15 @@ class PlaybackEngine extends EventEmitter {
     const current = this.queue.getCurrent();
     if (current) {
       recordPlay(current.id);
+    }
+
+    // Notify intelligence of the new track
+    const sessionId = this.session.getSessionId();
+    if (sessionId) {
+      const trackRow = getTrackBySpotifyId(newSpotifyId);
+      if (trackRow) {
+        selector.onTrackPlayed(sessionId, trackRow);
+      }
     }
 
     // Fill queue with new tracks

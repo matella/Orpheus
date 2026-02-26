@@ -12,6 +12,14 @@ export interface PlaybackTrack {
   energy: number | null;
   valence: number | null;
   tempo: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  loudness: number | null;
+  speechiness: number | null;
+  genreCluster: string | null;
+  aggressiveness: number | null;
+  familiarityScore: number;
 }
 
 export interface EngineState {
@@ -40,5 +48,13 @@ export function toPlaybackTrack(row: TrackRow): PlaybackTrack {
     energy: row.energy,
     valence: row.valence,
     tempo: row.tempo,
+    danceability: row.danceability,
+    acousticness: row.acousticness,
+    instrumentalness: row.instrumentalness,
+    loudness: row.loudness,
+    speechiness: row.speechiness,
+    genreCluster: row.genre_cluster,
+    aggressiveness: row.aggressiveness,
+    familiarityScore: row.familiarity_score,
   };
 }
