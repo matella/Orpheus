@@ -225,8 +225,15 @@ export function getGenreDistribution(): { genre: string; count: number }[] {
 /**
  * Get a random sample of tracks with features.
  */
-export function getRandomTracks(limit: number): TrackRow[] {
+export function getRandomTracks(limit: number, excludeIds?: Set<number>): TrackRow[] {
   const db = getDb();
+  if (excludeIds && excludeIds.size > 0) {
+    const ids = [...excludeIds];
+    const placeholders = ids.map(() => '?').join(',');
+    return db.prepare(
+      `SELECT * FROM tracks WHERE features_fetched = 1 AND id NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT ?`,
+    ).all(...ids, limit) as unknown as TrackRow[];
+  }
   return db.prepare(
     'SELECT * FROM tracks WHERE features_fetched = 1 ORDER BY RANDOM() LIMIT ?',
   ).all(limit) as unknown as TrackRow[];

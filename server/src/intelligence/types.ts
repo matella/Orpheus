@@ -40,6 +40,8 @@ export interface ScoringContext {
   recentArtists: string[];
   sessionSkipCount: number;
   sessionTrackCount: number;
+  /** Session-scoped target genre set by music requests (e.g. "more kpop"). */
+  targetGenre?: string | null;
 }
 
 /**

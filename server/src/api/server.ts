@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { config } from '../config.js';
@@ -13,6 +16,9 @@ import { sessionRoutes } from './routes/session.routes.js';
 import { analyticsRoutes } from './routes/analytics.routes.js';
 import { contextRoutes } from './routes/context.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const overlayPath = join(__dirname, '../../public/overlay.html');
 
 export async function buildServer() {
   const server = Fastify({
@@ -52,6 +58,12 @@ export async function buildServer() {
     service: 'orpheus',
     timestamp: new Date().toISOString(),
   }));
+
+  // OBS overlay page (read fresh each request so HTML changes are picked up without restart)
+  server.get('/overlay', async (_request, reply) => {
+    const html = readFileSync(overlayPath, 'utf-8');
+    reply.type('text/html').send(html);
+  });
 
   // WebSocket for real-time state push
   await registerWebSocket(server);

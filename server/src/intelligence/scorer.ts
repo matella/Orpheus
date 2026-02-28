@@ -103,7 +103,20 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
   const bpmDelta =
     Math.abs((track.tempo ?? 120) - state.tempo) / Math.max(1, state.tempo);
   const energyDelta = Math.abs((track.energy ?? 0.5) - state.energy);
-  const transition = 1 - (bpmDelta + energyDelta) / 2;
+  const valenceDelta = Math.abs((track.valence ?? 0.5) - state.valence);
+  const aggressivenessDelta = Math.abs((track.aggressiveness ?? 0.3) - state.aggressiveness);
+
+  // Genre continuity: prefer explicit target genre, fall back to current state genre
+  const referenceGenre = context.targetGenre || state.genreCluster;
+  const genreScore = (referenceGenre && track.genre_cluster)
+    ? (referenceGenre === track.genre_cluster ? 1.0 : 0.3)
+    : 0.7;
+
+  // Audio transition: 4 dimensions averaged (BPM, energy, valence, aggressiveness)
+  const audioTransition = 1 - (bpmDelta + energyDelta + valenceDelta + aggressivenessDelta) / 4;
+
+  // Final: 60% audio smoothness + 40% genre continuity
+  const transition = audioTransition * 0.6 + genreScore * 0.4;
 
   // --- fatigue: placeholder (always 1.0 for now) ---
   const fatigue = 1.0;

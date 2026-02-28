@@ -106,7 +106,14 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
   }).length;
 
   if (discoveryInPool < desiredDiscovery) {
-    const neverPlayed = baseCandidates.filter((t) => {
+    // Source discovery from relaxed-proximity pool (not unfiltered base)
+    // to prevent injecting tracks from distant genres/energy ranges
+    const relaxedPool = applyProximity(
+      baseCandidates,
+      BPM_PROXIMITY_THRESHOLD * 2,
+      ENERGY_PROXIMITY_THRESHOLD * 2,
+    );
+    const neverPlayed = relaxedPool.filter((t) => {
       if (candidateIdSet.has(t.id)) return false;
       const pref = getPreference(t.id);
       return !pref || pref.play_count === 0;

@@ -294,6 +294,34 @@ Respond with ONLY this JSON format:
 }`;
 }
 
+// ── Artist Suggestion for Vague Requests ─────────────────────────
+
+export interface ArtistSuggestion {
+  artists: string[];
+}
+
+export function buildArtistSuggestionPrompt(userPrompt: string): string {
+  return `You are a music expert helping an intelligent music player find tracks on Spotify. The user made a vague music request that didn't return enough results from a keyword search.
+
+USER REQUEST: "${userPrompt}"
+
+Your task: suggest 5-8 specific, well-known artist names whose music matches this request. These artists should:
+- Be available on Spotify (major/popular artists preferred)
+- Match the mood, genre, and style described in the request
+- Provide good variety (don't suggest artists that all sound the same)
+- Be real artists with substantial catalogues
+
+For example:
+- "chill piano music" → Ludovico Einaudi, Yiruma, Nils Frahm, Ólafur Arnalds, Chad Lawson
+- "upbeat workout music" → The Prodigy, Run the Jewels, Dua Lipa, Rage Against the Machine, Major Lazer
+- "sad indie songs" → Bon Iver, Phoebe Bridgers, Elliott Smith, Mazzy Star, Iron & Wine
+
+Respond with ONLY this JSON format:
+{
+  "artists": ["Artist Name 1", "Artist Name 2", "Artist Name 3", "Artist Name 4", "Artist Name 5"]
+}`;
+}
+
 export interface ContextInferenceInput {
   timeBracket: string;
   dayOfWeek: string;

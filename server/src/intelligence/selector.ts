@@ -22,6 +22,20 @@ class IntelligenceSelector {
   private recentArtists: string[] = [];
   private sessionSkipCount: number = 0;
   private sessionTrackCount: number = 0;
+  private targetGenre: string | null = null;
+
+  /**
+   * Set or clear a session-scoped target genre.
+   * When set, the scorer favors tracks matching this genre.
+   */
+  setTargetGenre(genre: string | null): void {
+    this.targetGenre = genre;
+    logger.info({ targetGenre: genre }, 'Target genre set for session');
+  }
+
+  getTargetGenre(): string | null {
+    return this.targetGenre;
+  }
 
   /**
    * Start tracking a new session.
@@ -31,6 +45,7 @@ class IntelligenceSelector {
     this.recentArtists = [];
     this.sessionSkipCount = 0;
     this.sessionTrackCount = 0;
+    this.targetGenre = null;
     stateVectorManager.initSession(sessionId);
     logger.info({ sessionId }, 'Intelligence selector session initialized');
   }
@@ -45,6 +60,7 @@ class IntelligenceSelector {
     this.recentArtists = [];
     this.sessionSkipCount = 0;
     this.sessionTrackCount = 0;
+    this.targetGenre = null;
     logger.info({ sessionId }, 'Intelligence selector session ended');
   }
 
@@ -52,7 +68,7 @@ class IntelligenceSelector {
    * Select the next track to play using the full intelligence pipeline.
    * Returns null if no suitable candidates exist.
    */
-  selectNextTrack(sessionId: number): TrackRow | null {
+  selectNextTrack(sessionId: number, excludeIds?: Set<number>): TrackRow | null {
     // 1. Get current state vector
     const stateVector = stateVectorManager.getState(sessionId);
 
@@ -60,13 +76,19 @@ class IntelligenceSelector {
     const steering = loadSteeringControls();
 
     // 3. Build scoring context
+    // Merge queue exclusion IDs into recent track IDs so getCandidates() filters them out
+    const effectiveRecentIds = excludeIds && excludeIds.size > 0
+      ? [...this.recentTrackIds, ...excludeIds]
+      : this.recentTrackIds;
+
     const scoringContext: ScoringContext = {
       stateVector,
       steering,
-      recentTrackIds: this.recentTrackIds,
+      recentTrackIds: effectiveRecentIds,
       recentArtists: this.recentArtists,
       sessionSkipCount: this.sessionSkipCount,
       sessionTrackCount: this.sessionTrackCount,
+      targetGenre: this.targetGenre,
     };
 
     // 4. Get candidates

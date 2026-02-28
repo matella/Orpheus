@@ -3,7 +3,7 @@ import { logger } from '../shared/logger.js';
 import { PLAYER_POLL_INTERVAL_MS } from '../shared/constants.js';
 import { sleep } from '../shared/utils.js';
 import { getPlayerState } from '../spotify/player.js';
-import { playTrack, addToQueue, drainQueue } from '../spotify/player.js';
+import { playTrack, addToQueue, drainQueue, skipToNext } from '../spotify/player.js';
 import { getRandomTracks, getTrackBySpotifyId } from '../database/repositories/track.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
 import { selector } from '../intelligence/selector.js';
@@ -23,7 +23,7 @@ export interface EngineEvents {
   track_changed: { current: PlaybackTrack; next: PlaybackTrack | null };
   session_started: { sessionId: number; deviceName: string | null };
   session_ended: { sessionId: number; trackCount: number };
-  state_updated: { state: EngineState };
+  state_updated: { state: EngineState; current: PlaybackTrack | null; next: PlaybackTrack | null };
 }
 
 /**
@@ -48,6 +48,9 @@ class PlaybackEngine extends EventEmitter {
   private trackStartTime: number | null = null;
   private lastProgressMs: number = 0;
   private injectedQueue: PlaybackTrack[] = [];
+  private nextSyncedToSpotify = false;
+  private bufferSyncedToSpotify = false;
+  private skipInProgress = false;
 
   /**
    * Start the engine for a given device.
@@ -124,6 +127,8 @@ class PlaybackEngine extends EventEmitter {
 
     this.queue.clear();
     this.injectedQueue = [];
+    this.nextSyncedToSpotify = false;
+    this.bufferSyncedToSpotify = false;
     this.currentTrackSpotifyId = null;
     this.deviceId = null;
     this.deviceName = null;
@@ -138,10 +143,35 @@ class PlaybackEngine extends EventEmitter {
   }
 
   /**
+   * Log a snapshot of the queue state for diagnostics.
+   */
+  private logQueueState(label: string): void {
+    const current = this.queue.getCurrent();
+    const next = this.queue.peekNext();
+    const buffer = this.queue.peekBuffer();
+    logger.info(
+      {
+        label,
+        current: current ? `${current.name} (${current.artist})` : null,
+        next: next ? `${next.name} (${next.artist})` : null,
+        buffer: buffer ? `${buffer.name} (${buffer.artist})` : null,
+        nextSynced: this.nextSyncedToSpotify,
+        bufferSynced: this.bufferSyncedToSpotify,
+        skipInProgress: this.skipInProgress,
+      },
+      `Queue state: ${label}`,
+    );
+  }
+
+  /**
    * Skip the current track.
    */
   async skip(): Promise<void> {
     if (this.status !== 'running') return;
+    this.skipInProgress = true;
+    logger.info('skip() called');
+    this.logQueueState('skip-entry');
+    try {
 
     const current = this.queue.getCurrent();
     if (current) {
@@ -172,7 +202,23 @@ class PlaybackEngine extends EventEmitter {
     const next = this.queue.getCurrent();
 
     if (next) {
-      await playTrack(next.uri, this.deviceId ?? undefined);
+      if (this.nextSyncedToSpotify) {
+        // Track is already at the front of Spotify's user queue — use skipToNext()
+        // to consume it naturally. This avoids leaving a stale duplicate.
+        logger.info({ strategy: 'skipToNext', track: next.name }, 'Skip strategy: synced — using skipToNext()');
+        await skipToNext();
+        // Shift sync flags: buffer (if synced) is now the front of Spotify's queue
+        this.nextSyncedToSpotify = this.bufferSyncedToSpotify;
+        this.bufferSyncedToSpotify = false;
+      } else {
+        // Track was never synced to Spotify — must force-play it.
+        // Drain first to clear any stale entries.
+        logger.info({ strategy: 'drainAndPlay', track: next.name }, 'Skip strategy: unsynced — draining queue and force-playing');
+        await drainQueue();
+        await playTrack(next.uri, this.deviceId ?? undefined);
+        this.nextSyncedToSpotify = false;
+        this.bufferSyncedToSpotify = false;
+      }
       this.currentTrackSpotifyId = next.spotifyId;
       this.trackStartTime = Date.now();
       this.trackCount++;
@@ -191,6 +237,12 @@ class PlaybackEngine extends EventEmitter {
 
     // Fill the queue
     await this.fillQueue();
+    this.logQueueState('skip-exit');
+    logger.info('skip() complete');
+
+    } finally {
+      this.skipInProgress = false;
+    }
   }
 
   /**
@@ -235,8 +287,10 @@ class PlaybackEngine extends EventEmitter {
 
     const first = tracks[0];
     this.queue.setNext(first);
+    this.nextSyncedToSpotify = false;
     try {
       await addToQueue(first.uri, this.deviceId ?? undefined);
+      this.nextSyncedToSpotify = true;
       logger.info({ track: first.name, artist: first.artist }, 'Injected track as next');
     } catch (err) {
       logger.warn({ err, track: first.name }, 'Failed to add injected track to Spotify queue');
@@ -244,6 +298,7 @@ class PlaybackEngine extends EventEmitter {
 
     if (tracks.length > 1) {
       this.queue.setBuffer(tracks[1]);
+      this.bufferSyncedToSpotify = false;
     }
 
     if (tracks.length > 2) {
@@ -279,6 +334,9 @@ class PlaybackEngine extends EventEmitter {
 
     try {
       await playTrack(track.uri, this.deviceId ?? undefined);
+      // Fresh start — ensure sync flags are reset before fillQueue
+      this.nextSyncedToSpotify = false;
+      this.bufferSyncedToSpotify = false;
     } catch (err) {
       logger.error({ err, track: track.name }, 'Failed to start playback');
       this.stop();
@@ -313,28 +371,59 @@ class PlaybackEngine extends EventEmitter {
   }
 
   private async fillQueue(): Promise<void> {
+    // Build exclusion set from tracks already in the queue to prevent duplicates
+    const excludeIds = new Set<number>();
+    const currentTrack = this.queue.getCurrent();
+    if (currentTrack) excludeIds.add(currentTrack.id);
+    const existingNext = this.queue.peekNext();
+    if (existingNext) excludeIds.add(existingNext.id);
+    const existingBuffer = this.queue.peekBuffer();
+    if (existingBuffer) excludeIds.add(existingBuffer.id);
+
+    // Fill next slot if empty
     if (this.queue.needsNext()) {
-      // Prefer injected tracks over intelligence-selected tracks
       const next = this.injectedQueue.length > 0
         ? this.injectedQueue.shift()!
-        : this.selectNextTrack();
+        : this.selectNextTrack(excludeIds);
       if (next) {
         this.queue.setNext(next);
-        try {
-          await addToQueue(next.uri, this.deviceId ?? undefined);
-          logger.info({ track: next.name, artist: next.artist }, 'Queued next track on Spotify');
-        } catch (err) {
-          logger.warn({ err, track: next.name }, 'Failed to add next track to Spotify queue — will force-play on transition');
-        }
+        excludeIds.add(next.id); // Also exclude from buffer selection
+        this.nextSyncedToSpotify = false;
       }
     }
 
+    // Sync next to Spotify if not already synced
+    const next = this.queue.peekNext();
+    if (next && !this.nextSyncedToSpotify) {
+      try {
+        await addToQueue(next.uri, this.deviceId ?? undefined);
+        this.nextSyncedToSpotify = true;
+        logger.info({ track: next.name, artist: next.artist }, 'Synced next track to Spotify queue');
+      } catch (err) {
+        logger.warn({ err, track: next.name }, 'Failed to sync next track to Spotify queue');
+      }
+    }
+
+    // Fill buffer slot if empty
     if (this.queue.needsBuffer()) {
       const buffer = this.injectedQueue.length > 0
         ? this.injectedQueue.shift()!
-        : this.selectNextTrack();
+        : this.selectNextTrack(excludeIds);
       if (buffer) {
         this.queue.setBuffer(buffer);
+        this.bufferSyncedToSpotify = false;
+      }
+    }
+
+    // Sync buffer to Spotify if not already synced
+    const buffer = this.queue.peekBuffer();
+    if (buffer && !this.bufferSyncedToSpotify) {
+      try {
+        await addToQueue(buffer.uri, this.deviceId ?? undefined);
+        this.bufferSyncedToSpotify = true;
+        logger.info({ track: buffer.name, artist: buffer.artist }, 'Synced buffer track to Spotify queue');
+      } catch (err) {
+        logger.warn({ err, track: buffer.name }, 'Failed to sync buffer track to Spotify queue');
       }
     }
   }
@@ -343,15 +432,15 @@ class PlaybackEngine extends EventEmitter {
    * Select the next track to play using the intelligence engine.
    * Always falls back to random selection so the queue never starves.
    */
-  private selectNextTrack(): PlaybackTrack | null {
+  private selectNextTrack(excludeIds?: Set<number>): PlaybackTrack | null {
     const sessionId = this.session.getSessionId();
     if (sessionId) {
-      const selected = selector.selectNextTrack(sessionId);
+      const selected = selector.selectNextTrack(sessionId, excludeIds);
       if (selected) return toPlaybackTrack(selected);
       logger.warn('Intelligence selector returned no candidates — falling back to random');
     }
     // Fallback: random track from the library
-    const rows = getRandomTracks(1);
+    const rows = getRandomTracks(1, excludeIds);
     return rows.length > 0 ? toPlaybackTrack(rows[0]) : null;
   }
 
@@ -372,6 +461,11 @@ class PlaybackEngine extends EventEmitter {
   }
 
   private async pollAndProcess(): Promise<void> {
+    if (this.skipInProgress) {
+      logger.info('pollAndProcess: skipped (skipInProgress=true)');
+      return;
+    }
+
     const playerState = await getPlayerState();
 
     // No active player — stop the engine
@@ -401,15 +495,82 @@ class PlaybackEngine extends EventEmitter {
           { replayedTrack: playerState.track.name, forcingNext: next.name },
           'Same-track restart detected — force-playing next queued track',
         );
-        await this.handleTrackChange(next.spotifyId, 0);
+        // Record completion of the replayed track
+        const current = this.queue.getCurrent();
+        if (current) {
+          const listenDuration = this.trackStartTime ? Date.now() - this.trackStartTime : 0;
+          recordInteraction({
+            trackId: current.id,
+            sessionId: this.session.getSessionId() ?? undefined,
+            interactionType: 'play',
+            listenDurationMs: listenDuration,
+            completionRatio: current.durationMs > 0 ? Math.min(1, listenDuration / current.durationMs) : 0,
+          });
+          this.session.recordTrack(listenDuration);
+        }
+        // Force-play the next track directly (don't go through handleTrackChange
+        // which would assume a natural transition without actually playing on Spotify)
+        this.queue.advance();
+        await drainQueue();
+        await playTrack(next.uri, this.deviceId ?? undefined);
+        this.nextSyncedToSpotify = false;
+        this.bufferSyncedToSpotify = false;
+        this.currentTrackSpotifyId = next.spotifyId;
+        this.trackStartTime = Date.now();
+        this.trackCount++;
+
+        recordPlay(next.id);
+
+        const sessionId = this.session.getSessionId();
+        if (sessionId) {
+          const trackRow = getTrackBySpotifyId(next.spotifyId);
+          if (trackRow) selector.onTrackPlayed(sessionId, trackRow);
+        }
+
+        this.emit('track_changed', { current: next, next: this.queue.peekNext() });
+        this.emitState();
+        await this.fillQueue();
       } else {
-        // No next track — treat as a natural transition to trigger handleTrackChange
-        // which will record the completion and try to select a new track
+        // No next track — select one, then force-play it
         logger.info('Same-track restart detected but no next track — selecting new track');
-        const newTrack = this.selectNextTrack();
+        const currentForExclude = this.queue.getCurrent();
+        const restartExcludeIds = new Set<number>();
+        if (currentForExclude) restartExcludeIds.add(currentForExclude.id);
+        const newTrack = this.selectNextTrack(restartExcludeIds);
         if (newTrack) {
+          const current = this.queue.getCurrent();
+          if (current) {
+            const listenDuration = this.trackStartTime ? Date.now() - this.trackStartTime : 0;
+            recordInteraction({
+              trackId: current.id,
+              sessionId: this.session.getSessionId() ?? undefined,
+              interactionType: 'play',
+              listenDurationMs: listenDuration,
+              completionRatio: current.durationMs > 0 ? Math.min(1, listenDuration / current.durationMs) : 0,
+            });
+            this.session.recordTrack(listenDuration);
+          }
           this.queue.setNext(newTrack);
-          await this.handleTrackChange(newTrack.spotifyId, 0);
+          this.queue.advance();
+          await drainQueue();
+          await playTrack(newTrack.uri, this.deviceId ?? undefined);
+          this.nextSyncedToSpotify = false;
+          this.bufferSyncedToSpotify = false;
+          this.currentTrackSpotifyId = newTrack.spotifyId;
+          this.trackStartTime = Date.now();
+          this.trackCount++;
+
+          recordPlay(newTrack.id);
+
+          const sessionId = this.session.getSessionId();
+          if (sessionId) {
+            const trackRow = getTrackBySpotifyId(newTrack.spotifyId);
+            if (trackRow) selector.onTrackPlayed(sessionId, trackRow);
+          }
+
+          this.emit('track_changed', { current: newTrack, next: this.queue.peekNext() });
+          this.emitState();
+          await this.fillQueue();
         }
       }
     }
@@ -425,6 +586,11 @@ class PlaybackEngine extends EventEmitter {
     newSpotifyId: string,
     progressMs: number,
   ): Promise<void> {
+    logger.info(
+      { newSpotifyId, currentTrackSpotifyId: this.currentTrackSpotifyId },
+      'handleTrackChange() called',
+    );
+    this.logQueueState('handleTrackChange-entry');
     const previous = this.queue.getCurrent();
     let completionRatio = 0;
 
@@ -462,8 +628,11 @@ class PlaybackEngine extends EventEmitter {
     const expectedNext = this.queue.peekNext();
     if (expectedNext && expectedNext.spotifyId === newSpotifyId) {
       // Natural transition to our queued track — perfect
-      logger.debug({ track: expectedNext.name }, 'Natural transition to queued track');
+      logger.info({ track: expectedNext.name }, 'Natural transition to queued track');
       this.queue.advance();
+      // Buffer was promoted to next — carry its sync state
+      this.nextSyncedToSpotify = this.bufferSyncedToSpotify;
+      this.bufferSyncedToSpotify = false;
     } else if (expectedNext && completionRatio >= 0.8) {
       // Track ended naturally but Spotify played its autoplay instead of our queue.
       // Force-play the intended track to maintain Orpheus control.
@@ -473,7 +642,12 @@ class PlaybackEngine extends EventEmitter {
       );
       this.queue.advance();
       try {
+        // Drain stale queue entries before force-playing to prevent duplicates
+        await drainQueue();
         await playTrack(expectedNext.uri, this.deviceId ?? undefined);
+        // Reset sync flags — queue was drained and playTrack started fresh
+        this.nextSyncedToSpotify = false;
+        this.bufferSyncedToSpotify = false;
         this.currentTrackSpotifyId = expectedNext.spotifyId;
         this.trackStartTime = Date.now();
         this.trackCount++;
@@ -497,12 +671,16 @@ class PlaybackEngine extends EventEmitter {
       }
     } else {
       // User manually changed the track on Spotify — accept it
-      logger.debug({ newSpotifyId }, 'External track change detected');
+      logger.info(
+        { newSpotifyId, expectedNext: expectedNext?.name ?? null, completionRatio: completionRatio.toFixed(2) },
+        'External track change detected',
+      );
       const externalRow = getTrackBySpotifyId(newSpotifyId);
       if (externalRow) {
         this.queue.setCurrent(toPlaybackTrack(externalRow));
       } else {
         // Track not in our DB — clear current so we don't show stale info
+        logger.info({ newSpotifyId }, 'Track not in DB — clearing queue');
         this.queue.clear();
       }
     }
@@ -531,11 +709,16 @@ class PlaybackEngine extends EventEmitter {
     if (current) {
       this.emit('track_changed', { current, next: this.queue.peekNext() });
     }
+    this.logQueueState('handleTrackChange-exit');
     this.emitState();
   }
 
   private emitState(): void {
-    this.emit('state_updated', { state: this.getState() });
+    this.emit('state_updated', {
+      state: this.getState(),
+      current: this.queue.getCurrent(),
+      next: this.queue.peekNext(),
+    });
   }
 }
 

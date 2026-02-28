@@ -5,6 +5,7 @@ import {
   recordSteeringSnapshot,
 } from '../../intelligence/steering.js';
 import { engine } from '../../playback/engine.js';
+import { selector } from '../../intelligence/selector.js';
 import type { SteeringControls } from '../../intelligence/types.js';
 import { STEERING_KEYS } from '../../intelligence/types.js';
 import { broadcast } from '../websocket.js';
@@ -53,6 +54,23 @@ export async function steeringRoutes(fastify: FastifyInstance): Promise<void> {
     // Broadcast update to all WebSocket clients
     broadcast({ type: 'steering_updated', data: current });
 
+    return { success: true };
+  });
+
+  /**
+   * GET /api/steering/target-genre
+   * Get the current session-scoped target genre (set by music requests).
+   */
+  fastify.get('/target-genre', async () => {
+    return { targetGenre: selector.getTargetGenre() };
+  });
+
+  /**
+   * DELETE /api/steering/target-genre
+   * Clear the target genre, returning the AI to its natural genre selection.
+   */
+  fastify.delete('/target-genre', async () => {
+    selector.setTargetGenre(null);
     return { success: true };
   });
 }

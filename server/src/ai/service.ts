@@ -23,6 +23,8 @@ import {
   buildMonthlyRecapPrompt,
   buildContextInferencePrompt,
   buildPromptParsePrompt,
+  buildArtistSuggestionPrompt,
+  type ArtistSuggestion,
   type WeightSuggestion,
   type SessionNameSuggestion,
   type InsightSuggestion,
@@ -499,6 +501,41 @@ export async function parseUserMusicRequest(
     };
   } catch (err) {
     logger.warn({ err }, 'AI music request parsing failed');
+    return null;
+  }
+}
+
+/**
+ * Ask the AI to suggest specific artist names matching a vague music description.
+ * Used as a fallback when keyword/genre search returns insufficient results.
+ * Returns null if AI is unavailable or suggestion fails (caller should skip this step).
+ */
+export async function suggestArtistsForRequest(
+  prompt: string,
+): Promise<string[] | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const aiPrompt = buildArtistSuggestionPrompt(prompt);
+    const result = await generateJson<ArtistSuggestion>(aiPrompt, { timeout: 15000 });
+
+    if (!result || !Array.isArray(result.artists) || result.artists.length === 0) {
+      return null;
+    }
+
+    // Validate: keep only non-empty strings, limit to 8
+    const artists = result.artists
+      .map(String)
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0 && a.length < 80)
+      .slice(0, 8);
+
+    if (artists.length === 0) return null;
+
+    logger.info({ prompt, artists }, 'AI artist suggestion generated');
+    return artists;
+  } catch (err) {
+    logger.warn({ err }, 'AI artist suggestion failed');
     return null;
   }
 }

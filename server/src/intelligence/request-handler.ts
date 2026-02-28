@@ -1,7 +1,8 @@
 import { logger } from '../shared/logger.js';
-import { parseUserMusicRequest } from '../ai/service.js';
+import { parseUserMusicRequest, suggestArtistsForRequest } from '../ai/service.js';
 import { searchLibraryTracks } from '../database/repositories/track.repo.js';
 import { searchSpotifyAndUpsert } from '../spotify/search.js';
+import { selector } from './selector.js';
 import type { TrackRow } from '../database/types.js';
 import type { ParsedMusicRequest } from '../ai/prompts.js';
 
@@ -58,6 +59,27 @@ export async function handleMusicRequest(prompt: string): Promise<RequestResult>
     }
   }
 
+  // 3b. AI artist suggestion fallback — if results are still thin and no
+  //     specific artist was requested, ask the AI to suggest artists matching
+  //     the vague description, then search Spotify for each individually.
+  if (tracks.length < parsed.trackCount && parsed.artists.length === 0) {
+    const suggestedArtists = await suggestArtistsForRequest(prompt);
+    if (suggestedArtists && suggestedArtists.length > 0) {
+      logger.info({ suggestedArtists }, 'AI suggested artists for vague request');
+      const remaining = parsed.trackCount - tracks.length;
+      const tracksPerArtist = Math.max(1, Math.ceil(remaining / suggestedArtists.length));
+
+      for (const artist of suggestedArtists) {
+        if (tracks.length >= parsed.trackCount) break;
+        const artistTracks = await searchSpotifyAndUpsert(
+          `artist:${artist}`,
+          tracksPerArtist,
+        );
+        tracks = [...tracks, ...artistTracks];
+      }
+    }
+  }
+
   // 4. Deduplicate by track ID
   const seen = new Set<number>();
   tracks = tracks.filter((t) => {
@@ -70,8 +92,30 @@ export async function handleMusicRequest(prompt: string): Promise<RequestResult>
   shuffleArray(tracks);
   tracks = tracks.slice(0, parsed.trackCount);
 
+  // 6. Steer the session toward the requested genre
+  //    - Explicit genre request → use it directly
+  //    - Artist request → infer genre from returned tracks' genre_cluster
+  let targetGenre: string | null = null;
+  if (parsed.genres.length > 0) {
+    targetGenre = parsed.genres[0];
+  } else if (tracks.length > 0) {
+    const genreCounts = new Map<string, number>();
+    for (const t of tracks) {
+      if (t.genre_cluster) {
+        genreCounts.set(t.genre_cluster, (genreCounts.get(t.genre_cluster) ?? 0) + 1);
+      }
+    }
+    if (genreCounts.size > 0) {
+      targetGenre = [...genreCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    }
+  }
+
+  if (targetGenre) {
+    selector.setTargetGenre(targetGenre);
+  }
+
   logger.info(
-    { trackCount: tracks.length, requested: parsed.trackCount },
+    { trackCount: tracks.length, requested: parsed.trackCount, targetGenre },
     'Music request fulfilled',
   );
 
@@ -97,6 +141,11 @@ const GENRE_KEYWORDS: Record<string, string[]> = {
   'punk': ['punk'],
   'blues': ['blues'],
   'soul': ['soul'],
+  'piano': ['piano'],
+  'ambient': ['ambient', 'atmospheric'],
+  'lofi': ['lofi', 'lo-fi', 'lo fi'],
+  'funk': ['funk'],
+  'reggae': ['reggae'],
 };
 
 const MOOD_KEYWORDS: Record<string, string[]> = {
@@ -171,19 +220,23 @@ function parseWithKeywords(prompt: string): ParsedMusicRequest {
     moods,
     descriptors,
     trackCount,
-    searchSpotify: artists.length > 0 || genres.length > 0,
+    searchSpotify: artists.length > 0 || genres.length > 0 || moods.length > 0,
   };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 function buildSpotifyQuery(parsed: ParsedMusicRequest, rawPrompt: string): string {
-  const parts: string[] = [];
-  if (parsed.artists.length > 0) parts.push(`artist:${parsed.artists[0]}`);
-  if (parsed.genres.length > 0) parts.push(`genre:${parsed.genres[0]}`);
-  // Fall back to raw prompt if nothing structured was extracted
-  if (parts.length === 0) return rawPrompt.slice(0, 100);
-  return parts.join(' ');
+  // Artist-specific search — use Spotify's artist: filter
+  if (parsed.artists.length > 0) {
+    return `artist:${parsed.artists[0]}`;
+  }
+  // Genre search — use as plain text, not Spotify's unreliable genre: filter
+  if (parsed.genres.length > 0) {
+    return `${parsed.genres[0]} music`;
+  }
+  // Fallback to raw prompt
+  return rawPrompt.slice(0, 100);
 }
 
 function shuffleArray<T>(arr: T[]): void {

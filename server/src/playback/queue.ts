@@ -97,9 +97,16 @@ export class TrackQueue {
    * Clear the entire queue.
    */
   clear(): void {
+    logger.info(
+      {
+        current: this.current ? `${this.current.name} (${this.current.artist})` : null,
+        next: this.next ? `${this.next.name} (${this.next.artist})` : null,
+        buffer: this.buffer ? `${this.buffer.name} (${this.buffer.artist})` : null,
+      },
+      'Queue: clearing',
+    );
     this.current = null;
     this.next = null;
     this.buffer = null;
-    logger.debug('Queue: cleared');
   }
 }

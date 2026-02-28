@@ -11,15 +11,15 @@ export const AUDIO_FEATURES_BATCH_SIZE = 100;
 // Playback engine
 export const TRACK_BUFFER_SIZE = 3; // current + next + buffer
 
-// State vector EMA blending factor
-export const STATE_VECTOR_ALPHA = 0.3;
+// State vector EMA blending factor (lower = more inertia, slower genre drift)
+export const STATE_VECTOR_ALPHA = 0.2;
 
 // Scoring weights (defaults)
 export const DEFAULT_WEIGHTS = {
   stateSimilarity: 0.25,
   preference: 0.20,
-  novelty: 0.15,
-  transition: 0.15,
+  novelty: 0.10,
+  transition: 0.20,
   fatigue: 0.10,
   context: 0.10,
   recency: 0.05,

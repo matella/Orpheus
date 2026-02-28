@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orpheus — Now Playing</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    width: 420px;
+    height: 260px;
+  }
+
+  .container {
+    width: 420px;
+    height: 260px;
+    position: relative;
+  }
+
+  .card {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 420px;
+    background: rgba(13, 13, 15, 0.92);
+    border-radius: 14px;
+    border: 1px solid rgba(212, 168, 67, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .card.hidden {
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+  }
+
+  /* ── Track rows ── */
+
+  .track-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    position: relative;
+    transition: opacity 0.5s ease;
+  }
+
+  /* Previous row */
+  .track-row.previous {
+    padding-top: 14px;
+  }
+
+  .track-row.previous .row-art {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+  }
+
+  /* Current row — hero emphasis */
+  .track-row.current {
+    opacity: 1;
+    padding: 12px 16px;
+    border-left: 3px solid #D4A843;
+    background: linear-gradient(90deg, rgba(212, 168, 67, 0.06) 0%, transparent 60%);
+    animation: accentPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes accentPulse {
+    0%, 100% { border-left-color: rgba(212, 168, 67, 0.7); }
+    50%      { border-left-color: rgba(212, 168, 67, 1.0); }
+  }
+
+  .track-row.current .row-art {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(212, 168, 67, 0.15);
+  }
+
+  /* Next row */
+  .track-row.next {
+    padding-bottom: 8px;
+  }
+
+  .track-row.next .row-art {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+  }
+
+  /* ── Side rows: hidden by default, JS reveals via display + opacity ── */
+
+  .track-row.side {
+    display: none;
+  }
+
+  /* ── Dividers ── */
+
+  .divider {
+    display: none;
+    height: 1px;
+    margin: 0 16px;
+    background: rgba(42, 42, 51, 0.6);
+    transition: opacity 0.5s ease;
+  }
+
+  /* ── Art (shared) ── */
+
+  .row-art {
+    flex-shrink: 0;
+    object-fit: cover;
+    background: #1E1E24;
+  }
+
+  .art-placeholder {
+    flex-shrink: 0;
+    background: #1E1E24;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4a4a55;
+    font-size: 16px;
+  }
+
+  .track-row.current .art-placeholder {
+    font-size: 22px;
+    color: #5a5a66;
+  }
+
+  /* ── Text info ── */
+
+  .row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .row-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #5a5a66;
+    line-height: 1;
+    margin-bottom: 1px;
+  }
+
+  .row-label.gold {
+    color: rgba(212, 168, 67, 0.7);
+  }
+
+  .row-track {
+    font-weight: 500;
+    color: #8A8A99;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    font-size: 12px;
+  }
+
+  .row-artist {
+    font-weight: 400;
+    color: #5a5a66;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    font-size: 11px;
+  }
+
+  /* Current row text is brighter + larger */
+  .track-row.current .row-track {
+    font-size: 15px;
+    font-weight: 600;
+    color: #E8E6E1;
+  }
+
+  .track-row.current .row-artist {
+    font-size: 13px;
+    color: #8A8A99;
+  }
+
+  /* ── Now Playing indicator ── */
+
+  .now-playing {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+  }
+
+  .now-playing-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #D4A843;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.85); }
+    50%      { opacity: 1;   transform: scale(1.1); }
+  }
+
+  .now-playing-text {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #D4A843;
+  }
+
+  /* ── Branding ── */
+
+  .brand {
+    position: absolute;
+    bottom: 7px;
+    right: 14px;
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(212, 168, 67, 0.25);
+  }
+
+  /* ── Crossfade animation (current row only) ── */
+
+  .crossfade {
+    animation: crossfade 0.5s ease;
+  }
+
+  @keyframes crossfade {
+    0%   { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card hidden" id="card">
+
+    <!-- Previous track row -->
+    <div class="track-row previous side" id="prevRow">
+      <img class="row-art" id="prevArt" src="" alt="" style="display:none;">
+      <div class="art-placeholder row-art" id="prevArtPlaceholder" style="width:38px;height:38px;border-radius:6px;">&#9835;</div>
+      <div class="row-info">
+        <div class="row-label">Played</div>
+        <div class="row-track" id="prevTrack"></div>
+        <div class="row-artist" id="prevArtist"></div>
+      </div>
+    </div>
+
+    <div class="divider" id="dividerTop"></div>
+
+    <!-- Current track row -->
+    <div class="track-row current" id="currentRow">
+      <img class="row-art" id="currentArt" src="" alt="" style="display:none;">
+      <div class="art-placeholder row-art" id="currentArtPlaceholder" style="width:60px;height:60px;border-radius:8px;">&#9835;</div>
+      <div class="row-info">
+        <div class="row-track" id="currentTrack"></div>
+        <div class="row-artist" id="currentArtist"></div>
+        <div class="now-playing">
+          <div class="now-playing-dot"></div>
+          <div class="now-playing-text">Now Playing</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider" id="dividerBottom"></div>
+
+    <!-- Next track row -->
+    <div class="track-row next side" id="nextRow">
+      <img class="row-art" id="nextArt" src="" alt="" style="display:none;">
+      <div class="art-placeholder row-art" id="nextArtPlaceholder" style="width:38px;height:38px;border-radius:6px;">&#9835;</div>
+      <div class="row-info">
+        <div class="row-label gold">Up Next</div>
+        <div class="row-track" id="nextTrack"></div>
+        <div class="row-artist" id="nextArtist"></div>
+      </div>
+    </div>
+
+    <div class="brand">Orpheus</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // DOM refs
+  var card = document.getElementById('card');
+
+  var prevRow = document.getElementById('prevRow');
+  var prevArt = document.getElementById('prevArt');
+  var prevArtPlaceholder = document.getElementById('prevArtPlaceholder');
+  var prevTrackEl = document.getElementById('prevTrack');
+  var prevArtistEl = document.getElementById('prevArtist');
+  var dividerTop = document.getElementById('dividerTop');
+
+  var currentRow = document.getElementById('currentRow');
+  var currentArt = document.getElementById('currentArt');
+  var currentArtPlaceholder = document.getElementById('currentArtPlaceholder');
+  var currentTrackEl = document.getElementById('currentTrack');
+  var currentArtistEl = document.getElementById('currentArtist');
+
+  var nextRow = document.getElementById('nextRow');
+  var nextArt = document.getElementById('nextArt');
+  var nextArtPlaceholder = document.getElementById('nextArtPlaceholder');
+  var nextTrackEl = document.getElementById('nextTrack');
+  var nextArtistEl = document.getElementById('nextArtist');
+  var dividerBottom = document.getElementById('dividerBottom');
+
+  // State
+  var previousTrack = null;
+  var currentTrackData = null;
+  var nextTrackData = null;
+  var currentTrackId = null;
+  var ws = null;
+  var reconnectTimer = null;
+  var sideRowTimer = null;
+  var hideTransitionTimer = null;
+  var SIDE_ROW_DISPLAY_MS = 8000; // Show previous/next for 8 seconds after track change
+
+  // ── Rendering ──
+
+  function applyArt(imgEl, placeholderEl, track) {
+    if (track && track.albumArtUrl) {
+      imgEl.src = track.albumArtUrl;
+      imgEl.style.display = 'block';
+      placeholderEl.style.display = 'none';
+    } else {
+      imgEl.style.display = 'none';
+      placeholderEl.style.display = 'flex';
+    }
+  }
+
+  // Set data in the previous row (without changing visibility)
+  function renderPreviousData() {
+    if (previousTrack) {
+      prevTrackEl.textContent = previousTrack.name || '';
+      prevArtistEl.textContent = previousTrack.artist || '';
+      applyArt(prevArt, prevArtPlaceholder, previousTrack);
+    }
+  }
+
+  function renderCurrent() {
+    if (currentTrackData) {
+      currentTrackEl.textContent = currentTrackData.name || '';
+      currentArtistEl.textContent = currentTrackData.artist || '';
+      applyArt(currentArt, currentArtPlaceholder, currentTrackData);
+      card.classList.remove('hidden');
+    } else {
+      card.classList.add('hidden');
+    }
+  }
+
+  // Set data in the next row (without changing visibility)
+  function renderNextData() {
+    if (nextTrackData) {
+      nextTrackEl.textContent = nextTrackData.name || '';
+      nextArtistEl.textContent = nextTrackData.artist || '';
+      applyArt(nextArt, nextArtPlaceholder, nextTrackData);
+    }
+  }
+
+  // Full render — used on clear/reset (hides everything)
+  function renderAll() {
+    renderPreviousData();
+    renderCurrent();
+    renderNextData();
+    // On full reset, hide side rows immediately
+    hideSideRowsImmediate();
+  }
+
+  // ── Crossfade animation helper (current row only) ──
+
+  function crossfadeRow(el) {
+    el.classList.remove('crossfade');
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add('crossfade');
+  }
+
+  // ── Side row visibility ──
+
+  function showSideRows() {
+    // Cancel any pending hide transition
+    if (hideTransitionTimer) {
+      clearTimeout(hideTransitionTimer);
+      hideTransitionTimer = null;
+    }
+
+    // Show previous row
+    if (previousTrack) {
+      prevRow.style.display = 'flex';
+      prevRow.style.opacity = '0';
+      dividerTop.style.display = 'block';
+      dividerTop.style.opacity = '0';
+    }
+
+    // Show next row
+    if (nextTrackData) {
+      nextRow.style.display = 'flex';
+      nextRow.style.opacity = '0';
+      dividerBottom.style.display = 'block';
+      dividerBottom.style.opacity = '0';
+    }
+
+    // Animate opacity in on next frame (so display change registers first)
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (previousTrack) {
+          prevRow.style.opacity = '0.35';
+          dividerTop.style.opacity = '1';
+        }
+        if (nextTrackData) {
+          nextRow.style.opacity = '0.45';
+          dividerBottom.style.opacity = '1';
+        }
+      });
+    });
+  }
+
+  function hideSideRows() {
+    // Fade out
+    prevRow.style.opacity = '0';
+    dividerTop.style.opacity = '0';
+    nextRow.style.opacity = '0';
+    dividerBottom.style.opacity = '0';
+
+    // After fade transition completes, set display: none
+    if (hideTransitionTimer) clearTimeout(hideTransitionTimer);
+    hideTransitionTimer = setTimeout(function() {
+      hideTransitionTimer = null;
+      prevRow.style.display = 'none';
+      dividerTop.style.display = 'none';
+      nextRow.style.display = 'none';
+      dividerBottom.style.display = 'none';
+    }, 550); // slightly longer than the 0.5s CSS transition
+  }
+
+  // Instant hide (no animation) — used on reset/session end
+  function hideSideRowsImmediate() {
+    if (hideTransitionTimer) {
+      clearTimeout(hideTransitionTimer);
+      hideTransitionTimer = null;
+    }
+    prevRow.style.display = 'none';
+    prevRow.style.opacity = '0';
+    dividerTop.style.display = 'none';
+    dividerTop.style.opacity = '0';
+    nextRow.style.display = 'none';
+    nextRow.style.opacity = '0';
+    dividerBottom.style.display = 'none';
+    dividerBottom.style.opacity = '0';
+  }
+
+  function scheduleSideRowHide() {
+    if (sideRowTimer) clearTimeout(sideRowTimer);
+    sideRowTimer = setTimeout(function() {
+      sideRowTimer = null;
+      hideSideRows();
+    }, SIDE_ROW_DISPLAY_MS);
+  }
+
+  // ── Track update logic ──
+
+  function handleTrackUpdate(newCurrent, newNext) {
+    if (!newCurrent) {
+      if (sideRowTimer) { clearTimeout(sideRowTimer); sideRowTimer = null; }
+      previousTrack = null;
+      currentTrackData = null;
+      nextTrackData = null;
+      currentTrackId = null;
+      renderAll();
+      return;
+    }
+
+    var isNewTrack = newCurrent.spotifyId !== currentTrackId;
+
+    if (isNewTrack) {
+      // Shift: old current becomes previous
+      if (currentTrackData) {
+        previousTrack = {
+          name: currentTrackData.name,
+          artist: currentTrackData.artist,
+          albumArtUrl: currentTrackData.albumArtUrl,
+          spotifyId: currentTrackData.spotifyId
+        };
+      }
+      currentTrackData = newCurrent;
+      currentTrackId = newCurrent.spotifyId;
+      nextTrackData = newNext || null;
+
+      // Render data into all rows
+      renderCurrent();
+      renderPreviousData();
+      renderNextData();
+
+      // Reveal side rows + start auto-hide timer
+      showSideRows();
+      scheduleSideRowHide();
+
+      // Crossfade animation on current row
+      crossfadeRow(currentRow);
+    } else {
+      // Same track — just update next data (don't reveal side rows)
+      nextTrackData = newNext || null;
+      renderNextData();
+    }
+  }
+
+  // ── WebSocket ──
+
+  function connect() {
+    var wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var wsUrl = wsProtocol + '//' + location.host + '/ws';
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = function() {
+      console.log('[Orpheus Overlay] Connected');
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    ws.onmessage = function(event) {
+      try {
+        var msg = JSON.parse(event.data);
+
+        if (msg.type === 'track_changed' && msg.data) {
+          handleTrackUpdate(msg.data.current || null, msg.data.next || null);
+        }
+
+        if (msg.type === 'state_updated' && msg.data) {
+          if ('current' in msg.data) {
+            handleTrackUpdate(msg.data.current || null, msg.data.next || null);
+          }
+          // Hide when engine stops
+          if (msg.data.state && (msg.data.state.status === 'idle' || msg.data.state.status === 'stopping')) {
+            previousTrack = null;
+            currentTrackData = null;
+            nextTrackData = null;
+            currentTrackId = null;
+            renderAll();
+          }
+        }
+
+        if (msg.type === 'session_ended') {
+          previousTrack = null;
+          currentTrackData = null;
+          nextTrackData = null;
+          currentTrackId = null;
+          renderAll();
+        }
+      } catch (err) {
+        console.error('[Orpheus Overlay] Parse error:', err);
+      }
+    };
+
+    ws.onclose = function() {
+      console.log('[Orpheus Overlay] Disconnected — reconnecting in 5s');
+      scheduleReconnect();
+    };
+
+    ws.onerror = function() {
+      ws.close();
+    };
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(function() {
+      reconnectTimer = null;
+      connect();
+    }, 5000);
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>
