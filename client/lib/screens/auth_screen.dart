@@ -32,9 +32,10 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Failed to connect to server: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

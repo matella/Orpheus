@@ -59,3 +59,38 @@ export function weightedRandom<T>(items: T[], weights: number[]): T {
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Simple in-memory rate limiter.
+ * Tracks timestamps per key and rejects if too many requests within the window.
+ */
+export class RateLimiter {
+  private timestamps: Map<string, number[]> = new Map();
+
+  constructor(
+    private maxRequests: number,
+    private windowMs: number,
+  ) {}
+
+  /**
+   * Check if a request is allowed for the given key.
+   * Returns true if allowed, false if rate-limited.
+   */
+  allow(key: string): boolean {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+    let times = this.timestamps.get(key) ?? [];
+    // Evict timestamps outside the window
+    times = times.filter((t) => t > windowStart);
+    if (times.length === 0) {
+      this.timestamps.delete(key);
+    }
+    if (times.length >= this.maxRequests) {
+      this.timestamps.set(key, times);
+      return false;
+    }
+    times.push(now);
+    this.timestamps.set(key, times);
+    return true;
+  }
+}

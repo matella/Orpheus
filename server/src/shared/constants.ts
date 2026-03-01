@@ -9,7 +9,7 @@ export const RECENT_SYNC_INTERVAL_MINUTES = 30;
 export const AUDIO_FEATURES_BATCH_SIZE = 100;
 
 // Playback engine
-export const TRACK_BUFFER_SIZE = 3; // current + next + buffer
+export const TRACK_BUFFER_MIN_SIZE = 2; // minimum lookahead: next + buffer
 
 // State vector EMA blending factor (lower = more inertia, slower genre drift)
 export const STATE_VECTOR_ALPHA = 0.2;

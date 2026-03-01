@@ -18,8 +18,10 @@ class WebSocketService {
   /// Stream of all WebSocket messages from the server.
   Stream<Map<String, dynamic>> get messages => _controller.stream;
 
-  /// Whether the WebSocket is currently connected.
-  bool get isConnected => _channel != null;
+  bool _isConnected = false;
+
+  /// Whether the WebSocket is currently connected and receiving messages.
+  bool get isConnected => _isConnected && _channel != null;
 
   /// Connect to the WebSocket server.
   void connect() {
@@ -42,6 +44,8 @@ class WebSocketService {
 
       _channel!.stream.listen(
         (data) {
+          // Mark as connected on first successful message
+          if (!_isConnected) _isConnected = true;
           try {
             final decoded = jsonDecode(data as String) as Map<String, dynamic>;
             _controller.add(decoded);
@@ -59,6 +63,7 @@ class WebSocketService {
 
   void _scheduleReconnect() {
     _channel = null;
+    _isConnected = false;
     if (_intentionalClose) return;
 
     _reconnectTimer?.cancel();

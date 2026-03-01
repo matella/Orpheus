@@ -10,6 +10,7 @@ import { selector } from '../intelligence/selector.js';
 import { stateVectorManager } from '../intelligence/state-vector.js';
 import { learnTimePreferences } from '../intelligence/context-learning.js';
 import { generateSessionName, generateSessionRecap } from '../ai/service.js';
+import { getAiSettings } from '../database/repositories/settings.repo.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
 import { TrackQueue } from './queue.js';
 import { SessionManager } from './session.js';
@@ -148,13 +149,19 @@ class PlaybackEngine extends EventEmitter {
   private logQueueState(label: string): void {
     const current = this.queue.getCurrent();
     const next = this.queue.peekNext();
-    const buffer = this.queue.peekBuffer();
+    const lookaheadNames: string[] = [];
+    for (let i = 0; i < this.queue.getLookaheadSize(); i++) {
+      const t = this.queue.peekAt(i);
+      if (t) lookaheadNames.push(`${t.name} (${t.artist})`);
+    }
     logger.info(
       {
         label,
         current: current ? `${current.name} (${current.artist})` : null,
         next: next ? `${next.name} (${next.artist})` : null,
-        buffer: buffer ? `${buffer.name} (${buffer.artist})` : null,
+        lookaheadSize: this.queue.getLookaheadSize(),
+        targetSize: this.queue.getTargetSize(),
+        lookahead: lookaheadNames,
         nextSynced: this.nextSyncedToSpotify,
         bufferSynced: this.bufferSyncedToSpotify,
         skipInProgress: this.skipInProgress,
@@ -286,24 +293,25 @@ class PlaybackEngine extends EventEmitter {
     }
 
     const first = tracks[0];
-    this.queue.setNext(first);
-    this.nextSyncedToSpotify = false;
     try {
       await addToQueue(first.uri, this.deviceId ?? undefined);
+      this.queue.setNext(first);
       this.nextSyncedToSpotify = true;
       logger.info({ track: first.name, artist: first.artist }, 'Injected track as next');
     } catch (err) {
+      // API failed — still set the track in queue but mark as unsynced
+      // so fillQueue will retry the Spotify sync on next poll
       logger.warn({ err, track: first.name }, 'Failed to add injected track to Spotify queue');
+      this.queue.setNext(first);
+      this.nextSyncedToSpotify = false;
     }
 
-    if (tracks.length > 1) {
-      this.queue.setBuffer(tracks[1]);
-      this.bufferSyncedToSpotify = false;
+    // Remaining injected tracks go into the lookahead and injected queue
+    for (let i = 1; i < tracks.length; i++) {
+      this.injectedQueue.push(tracks[i]);
     }
-
-    if (tracks.length > 2) {
-      this.injectedQueue.push(...tracks.slice(2));
-    }
+    // bufferSyncedToSpotify needs reset since lookahead shifted
+    this.bufferSyncedToSpotify = false;
 
     this.emit('track_changed', {
       current: this.queue.getCurrent()!,
@@ -371,28 +379,28 @@ class PlaybackEngine extends EventEmitter {
   }
 
   private async fillQueue(): Promise<void> {
-    // Build exclusion set from tracks already in the queue to prevent duplicates
-    const excludeIds = new Set<number>();
-    const currentTrack = this.queue.getCurrent();
-    if (currentTrack) excludeIds.add(currentTrack.id);
-    const existingNext = this.queue.peekNext();
-    if (existingNext) excludeIds.add(existingNext.id);
-    const existingBuffer = this.queue.peekBuffer();
-    if (existingBuffer) excludeIds.add(existingBuffer.id);
+    // Dynamically size lookahead based on AI analysis interval.
+    // Target = aiAnalysisInterval + 1 so the engine has a full cycle
+    // of pre-selected tracks plus one extra for continuity.
+    const { aiAnalysisInterval } = getAiSettings();
+    this.queue.setTargetSize(aiAnalysisInterval + 1);
 
-    // Fill next slot if empty
-    if (this.queue.needsNext()) {
-      const next = this.injectedQueue.length > 0
+    // Build exclusion set from all tracks already in the queue
+    const excludeIds = this.queue.getAllIds();
+
+    // Fill lookahead slots until target size is reached
+    while (this.queue.needsFill()) {
+      const track = this.injectedQueue.length > 0
         ? this.injectedQueue.shift()!
         : this.selectNextTrack(excludeIds);
-      if (next) {
-        this.queue.setNext(next);
-        excludeIds.add(next.id); // Also exclude from buffer selection
-        this.nextSyncedToSpotify = false;
-      }
+      if (!track) break; // No more tracks available
+      this.queue.pushLookahead(track);
+      excludeIds.add(track.id);
     }
 
-    // Sync next to Spotify if not already synced
+    // Sync the first two lookahead positions to Spotify's queue.
+    // Only these are committed — deeper positions remain internal
+    // pre-selections that the AI can re-evaluate.
     const next = this.queue.peekNext();
     if (next && !this.nextSyncedToSpotify) {
       try {
@@ -404,18 +412,6 @@ class PlaybackEngine extends EventEmitter {
       }
     }
 
-    // Fill buffer slot if empty
-    if (this.queue.needsBuffer()) {
-      const buffer = this.injectedQueue.length > 0
-        ? this.injectedQueue.shift()!
-        : this.selectNextTrack(excludeIds);
-      if (buffer) {
-        this.queue.setBuffer(buffer);
-        this.bufferSyncedToSpotify = false;
-      }
-    }
-
-    // Sync buffer to Spotify if not already synced
     const buffer = this.queue.peekBuffer();
     if (buffer && !this.bufferSyncedToSpotify) {
       try {
@@ -687,10 +683,11 @@ class PlaybackEngine extends EventEmitter {
 
     this.currentTrackSpotifyId = newSpotifyId;
     this.trackStartTime = Date.now();
-    this.trackCount++;
 
     const current = this.queue.getCurrent();
+    // Only count the track if we know what it is
     if (current) {
+      this.trackCount++;
       recordPlay(current.id);
     }
 

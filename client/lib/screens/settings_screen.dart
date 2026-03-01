@@ -28,6 +28,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _checkConnection() async {
     setState(() => _isChecking = true);
+    // Apply the current URL before testing
+    final url = _serverUrlController.text.trim();
+    if (url.isNotEmpty && url != apiService.baseUrl) {
+      apiService.updateBaseUrl(url);
+    }
     try {
       final healthy = await apiService.checkHealth();
       setState(() => _isConnected = healthy);

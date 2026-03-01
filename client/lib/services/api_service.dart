@@ -1,12 +1,17 @@
+import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
 import '../config/constants.dart';
 
 class ApiService {
-  late final Dio _dio;
+  late Dio _dio;
 
   ApiService({String? baseUrl}) {
+    _initDio(baseUrl ?? apiBaseUrl);
+  }
+
+  void _initDio(String baseUrl) {
     _dio = Dio(BaseOptions(
-      baseUrl: baseUrl ?? apiBaseUrl,
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
@@ -17,6 +22,14 @@ class ApiService {
       logPrint: (obj) {}, // Silent in production
     ));
   }
+
+  /// Update the base URL for all future requests.
+  void updateBaseUrl(String newBaseUrl) {
+    _initDio(newBaseUrl);
+  }
+
+  /// Get the current base URL.
+  String get baseUrl => _dio.options.baseUrl;
 
   /// Check authentication status
   Future<Map<String, dynamic>> getAuthStatus() async {
@@ -35,7 +48,8 @@ class ApiService {
     try {
       final response = await _dio.get('/health');
       return response.data['status'] == 'ok';
-    } catch (_) {
+    } catch (e) {
+      developer.log('Health check failed: $e', name: 'ApiService');
       return false;
     }
   }
@@ -45,7 +59,8 @@ class ApiService {
     try {
       final response = await _dio.get('/playback/current');
       return response.data;
-    } catch (_) {
+    } catch (e) {
+      developer.log('getCurrentPlayback failed: $e', name: 'ApiService');
       return null;
     }
   }

@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { config } from '../config.js';
 import { logger } from '../shared/logger.js';
+import { RateLimiter } from '../shared/utils.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { playbackRoutes } from './routes/playback.routes.js';
@@ -16,6 +17,9 @@ import { sessionRoutes } from './routes/session.routes.js';
 import { analyticsRoutes } from './routes/analytics.routes.js';
 import { contextRoutes } from './routes/context.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
+
+// Rate limiter: 10 mutation requests per 5 seconds per IP
+const mutationLimiter = new RateLimiter(10, 5000);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const overlayPath = join(__dirname, '../../public/overlay.html');
@@ -51,6 +55,20 @@ export async function buildServer() {
 
   // Global error handler
   server.setErrorHandler(errorHandler);
+
+  // Rate limit mutation endpoints (POST/PUT/PATCH/DELETE)
+  server.addHook('onRequest', async (request, reply) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+      const ip = request.ip;
+      if (!mutationLimiter.allow(ip)) {
+        logger.warn({ ip, url: request.url }, 'Rate limit exceeded');
+        return reply.status(429).send({
+          error: 'RATE_LIMITED',
+          message: 'Too many requests. Please slow down.',
+        });
+      }
+    }
+  });
 
   // Health check
   server.get('/api/health', async () => ({

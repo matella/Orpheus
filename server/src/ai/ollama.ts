@@ -118,8 +118,15 @@ export async function generateJson<T>(
     logger.info({ elapsed, responseLength: data.response.length }, 'Ollama generateJson complete');
     logger.debug({ response: data.response }, 'Ollama raw JSON response');
 
-    const parsed = JSON.parse(data.response) as T;
-    return parsed;
+    const parsed = JSON.parse(data.response);
+
+    // Basic shape validation: AI should return an object, not a primitive or array
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      logger.warn({ type: typeof parsed, isArray: Array.isArray(parsed) }, 'Ollama returned non-object JSON');
+      return null;
+    }
+
+    return parsed as T;
   } catch (err) {
     const elapsed = Date.now() - start;
     logger.warn({ err, elapsed }, 'Ollama generateJson failed');

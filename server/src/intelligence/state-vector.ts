@@ -2,8 +2,12 @@ import type { TrackRow } from '../database/types.js';
 import { recordState } from '../database/repositories/state-history.repo.js';
 import { getTimePreferences } from '../database/repositories/time-preferences.repo.js';
 import { STATE_VECTOR_ALPHA } from '../shared/constants.js';
+import { clamp } from '../shared/utils.js';
 import { logger } from '../shared/logger.js';
 import type { StateVector } from './types.js';
+
+/** Max sessions to keep in memory before evicting oldest. */
+const MAX_CACHED_SESSIONS = 10;
 
 /**
  * Manages per-session state vectors using exponential moving average blending.
@@ -18,6 +22,15 @@ export class StateVectorManager {
    * if no historical data exists for the current time bracket.
    */
   initSession(sessionId: number): void {
+    // Evict oldest sessions if at capacity to prevent unbounded memory growth
+    if (this.states.size >= MAX_CACHED_SESSIONS) {
+      const oldest = this.states.keys().next().value;
+      if (oldest !== undefined) {
+        this.states.delete(oldest);
+        logger.debug({ evicted: oldest }, 'Evicted oldest state vector to stay under limit');
+      }
+    }
+
     const state = this.inferInitialState();
     this.states.set(sessionId, state);
     logger.debug(
@@ -40,13 +53,13 @@ export class StateVectorManager {
         'Using learned time preferences for initial state',
       );
       return {
-        energy: prefs.avg_energy,
-        valence: prefs.avg_valence,
-        tempo: prefs.avg_tempo,
+        energy: clamp(prefs.avg_energy, 0, 1),
+        valence: clamp(prefs.avg_valence, 0, 1),
+        tempo: clamp(prefs.avg_tempo, 40, 250),
         genreCluster: prefs.preferred_genres,
-        familiarity: prefs.avg_familiarity,
-        vocalness: prefs.avg_vocalness,
-        aggressiveness: prefs.avg_aggressiveness,
+        familiarity: clamp(prefs.avg_familiarity, 0, 1),
+        vocalness: clamp(prefs.avg_vocalness, 0, 1),
+        aggressiveness: clamp(prefs.avg_aggressiveness, 0, 1),
         context,
         fatigueLevel: 0,
       };

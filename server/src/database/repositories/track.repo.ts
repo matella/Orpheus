@@ -58,7 +58,8 @@ export function upsertTrack(data: UpsertTrackData): number {
   const row = db.prepare('SELECT id FROM tracks WHERE spotify_id = ?').get(data.spotifyId) as
     | { id: number }
     | undefined;
-  return row!.id;
+  if (!row) throw new Error(`Track not found after upsert: ${data.spotifyId}`);
+  return row.id;
 }
 
 /**

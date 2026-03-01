@@ -113,7 +113,8 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     : 0.7;
 
   // Audio transition: 4 dimensions averaged (BPM, energy, valence, aggressiveness)
-  const audioTransition = 1 - (bpmDelta + energyDelta + valenceDelta + aggressivenessDelta) / 4;
+  // Clamp to [0, 1] — bpmDelta can exceed 1.0 when candidate pool relaxes proximity filters
+  const audioTransition = Math.max(0, 1 - (bpmDelta + energyDelta + valenceDelta + aggressivenessDelta) / 4);
 
   // Final: 60% audio smoothness + 40% genre continuity
   const transition = audioTransition * 0.6 + genreScore * 0.4;

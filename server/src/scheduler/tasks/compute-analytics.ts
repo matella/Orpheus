@@ -1,6 +1,7 @@
 import { registerTask } from '../scheduler.js';
 import {
   setCacheValue,
+  cleanExpiredCache,
   getTotalListeningTime,
   getSkipRate,
   getCompletionRate,
@@ -38,6 +39,13 @@ export function registerAnalyticsComputeTask(): void {
       };
 
       setCacheValue('analytics:overview', overview, 24);
+
+      // Clean up expired cache entries
+      const cleaned = cleanExpiredCache();
+      if (cleaned > 0) {
+        logger.info({ cleaned }, 'Cleaned expired analytics cache entries');
+      }
+
       logger.info('Analytics cache updated');
     },
     runOnStart: false,

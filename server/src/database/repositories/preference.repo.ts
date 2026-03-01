@@ -26,22 +26,17 @@ export function getPreference(trackId: number): PreferenceRow | null {
 /**
  * Update preference score by a delta, clamped to [0, 1].
  * Creates the record if it doesn't exist.
+ * Uses atomic SQL to prevent lost updates from concurrent calls.
  */
 export function updatePreference(trackId: number, delta: number): void {
   const db = getDb();
-  const existing = getPreference(trackId);
-
-  if (existing) {
-    const newScore = Math.max(0, Math.min(1, existing.score + delta));
-    db.prepare(`
-      UPDATE preferences SET score = ?, updated_at = datetime('now') WHERE track_id = ?
-    `).run(newScore, trackId);
-  } else {
-    const score = Math.max(0, Math.min(1, 0.5 + delta));
-    db.prepare(`
-      INSERT INTO preferences (track_id, score, updated_at) VALUES (?, ?, datetime('now'))
-    `).run(trackId, score);
-  }
+  db.prepare(`
+    INSERT INTO preferences (track_id, score, updated_at)
+    VALUES (?, MAX(0, MIN(1, 0.5 + ?)), datetime('now'))
+    ON CONFLICT(track_id) DO UPDATE SET
+      score = MAX(0, MIN(1, score + ?)),
+      updated_at = datetime('now')
+  `).run(trackId, delta, delta);
 }
 
 /**

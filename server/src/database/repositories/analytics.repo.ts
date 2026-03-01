@@ -161,6 +161,17 @@ export function setCacheValue(key: string, value: object, ttlHours: number = 24)
 }
 
 /**
+ * Delete expired analytics cache entries.
+ */
+export function cleanExpiredCache(): number {
+  const db = getDb();
+  const result = db.prepare(`
+    DELETE FROM analytics_cache WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')
+  `).run();
+  return Number(result.changes);
+}
+
+/**
  * Get a cached analytics value (returns null if expired or missing).
  */
 export function getCacheValue<T>(key: string): T | null {

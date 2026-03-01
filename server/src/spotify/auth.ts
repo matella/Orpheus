@@ -23,6 +23,9 @@ const SCOPES = [
 // In-memory PKCE verifier for the current auth flow
 let codeVerifier: string | null = null;
 
+// Mutex for token refresh — prevents concurrent refresh attempts
+let refreshPromise: Promise<string> | null = null;
+
 function generateCodeVerifier(): string {
   return crypto.randomBytes(64).toString('base64url');
 }
@@ -108,7 +111,13 @@ export async function getValidToken(): Promise<string> {
 
   if (Date.now() + bufferMs >= expiresAt) {
     logger.debug('Access token expiring soon, refreshing...');
-    return await refreshAccessToken(tokens.refreshToken);
+    // Deduplicate concurrent refresh calls — all callers await the same promise
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken(tokens.refreshToken).finally(() => {
+        refreshPromise = null;
+      });
+    }
+    return await refreshPromise;
   }
 
   return tokens.accessToken;
