@@ -67,15 +67,45 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
       return bpmDelta <= bpmThreshold && energyDelta <= energyThreshold;
     });
 
-  // Try strict thresholds first
-  let candidates = applyProximity(
-    baseCandidates,
-    BPM_PROXIMITY_THRESHOLD,
-    ENERGY_PROXIMITY_THRESHOLD,
-  );
+  // ---- Genre-aware tiered filtering ----
+  // When the session has a dominant genre (or an explicit target genre),
+  // prefer same-genre candidates before falling back to cross-genre.
+  const referenceGenre = context.targetGenre || context.stateVector.genreCluster;
+
+  const sameGenre = referenceGenre
+    ? baseCandidates.filter((t) => t.genre_cluster === referenceGenre)
+    : [];
+
+  // Try strict proximity within same-genre first
+  let candidates = referenceGenre && sameGenre.length >= 10
+    ? applyProximity(sameGenre, BPM_PROXIMITY_THRESHOLD, ENERGY_PROXIMITY_THRESHOLD)
+    : [];
+
+  if (candidates.length < 10 && referenceGenre && sameGenre.length >= 10) {
+    // Relax proximity but keep genre lock
+    candidates = applyProximity(sameGenre, BPM_PROXIMITY_THRESHOLD * 2, ENERGY_PROXIMITY_THRESHOLD * 2);
+  }
+
+  if (candidates.length < 10 && sameGenre.length >= 10) {
+    // Drop proximity, keep genre
+    candidates = sameGenre;
+  }
 
   if (candidates.length < 10) {
-    // Relax: double both thresholds
+    // Fall back: all genres, strict proximity
+    logger.debug(
+      { sameGenre: sameGenre.length, genreLocked: candidates.length, referenceGenre },
+      'Not enough same-genre candidates, falling back to all genres',
+    );
+    candidates = applyProximity(
+      baseCandidates,
+      BPM_PROXIMITY_THRESHOLD,
+      ENERGY_PROXIMITY_THRESHOLD,
+    );
+  }
+
+  if (candidates.length < 10) {
+    // Relax: double both thresholds, all genres
     logger.debug(
       { strict: candidates.length },
       'Candidate pool too small, relaxing proximity thresholds',

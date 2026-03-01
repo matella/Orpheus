@@ -4,9 +4,10 @@ import type { StateVector, SteeringControls } from '../intelligence/types.js';
 
 export interface WeightSuggestion {
   stateSimilarity: number;
+  genre: number;
   preference: number;
-  novelty: number;
   transition: number;
+  novelty: number;
   fatigue: number;
   context: number;
   recency: number;

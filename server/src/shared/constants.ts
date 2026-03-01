@@ -16,10 +16,11 @@ export const STATE_VECTOR_ALPHA = 0.2;
 
 // Scoring weights (defaults)
 export const DEFAULT_WEIGHTS = {
-  stateSimilarity: 0.25,
-  preference: 0.20,
+  stateSimilarity: 0.20,
+  genre: 0.15,
+  preference: 0.15,
+  transition: 0.15,
   novelty: 0.10,
-  transition: 0.20,
   fatigue: 0.10,
   context: 0.10,
   recency: 0.05,
@@ -46,7 +47,7 @@ export const SAME_GENRE_LOOKBACK = 10;
 // Candidate pool
 export const BPM_PROXIMITY_THRESHOLD = 0.25; // Within 25%
 export const ENERGY_PROXIMITY_THRESHOLD = 0.3;
-export const TOP_CANDIDATES_FOR_RANDOM = 5;
+export const TOP_CANDIDATES_FOR_RANDOM = 3;
 
 // Steering debounce
 export const STEERING_DEBOUNCE_MS = 300;

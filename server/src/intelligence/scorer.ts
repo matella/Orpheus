@@ -30,7 +30,11 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     weights.recency *= 2.0; // Boost recency in explore mode — favors unplayed tracks
   }
   if (steering.genreOpenness < 0.4) {
+    weights.genre *= 1.5;     // Low openness = stronger genre lock
     weights.transition *= 1.3;
+  }
+  if (steering.genreOpenness > 0.7) {
+    weights.genre *= 0.5;     // High openness = relax genre constraint
   }
   if (steering.focusVsParty < 0.4) {
     weights.transition *= 1.3;
@@ -41,6 +45,7 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     const aiSuggestion = getActiveWeightSuggestion(sessionId);
     if (aiSuggestion) {
       weights.stateSimilarity *= aiSuggestion.stateSimilarity;
+      weights.genre *= aiSuggestion.genre;
       weights.preference *= aiSuggestion.preference;
       weights.novelty *= aiSuggestion.novelty;
       weights.transition *= aiSuggestion.transition;
@@ -99,25 +104,28 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     novelty = Math.min(1, novelty * FATIGUE_NOVELTY_BOOST);
   }
 
-  // --- transition: smoothness from current state ---
+  // --- genre: standalone genre coherence dimension ---
+  // Prefer tracks matching the session's dominant genre or an explicit target genre.
+  // Genre mismatch is heavily penalized to prevent jarring cross-genre jumps.
+  const referenceGenre = context.targetGenre || state.genreCluster;
+  let genre: number;
+  if (!referenceGenre || !track.genre_cluster) {
+    genre = 0.5; // No genre data — neutral
+  } else if (referenceGenre === track.genre_cluster) {
+    genre = 1.0; // Perfect match
+  } else {
+    genre = 0.1; // Genre mismatch — strong penalty
+  }
+
+  // --- transition: audio smoothness (pure audio features, no genre) ---
   const bpmDelta =
     Math.abs((track.tempo ?? 120) - state.tempo) / Math.max(1, state.tempo);
   const energyDelta = Math.abs((track.energy ?? 0.5) - state.energy);
   const valenceDelta = Math.abs((track.valence ?? 0.5) - state.valence);
   const aggressivenessDelta = Math.abs((track.aggressiveness ?? 0.3) - state.aggressiveness);
 
-  // Genre continuity: prefer explicit target genre, fall back to current state genre
-  const referenceGenre = context.targetGenre || state.genreCluster;
-  const genreScore = (referenceGenre && track.genre_cluster)
-    ? (referenceGenre === track.genre_cluster ? 1.0 : 0.3)
-    : 0.7;
-
-  // Audio transition: 4 dimensions averaged (BPM, energy, valence, aggressiveness)
   // Clamp to [0, 1] — bpmDelta can exceed 1.0 when candidate pool relaxes proximity filters
-  const audioTransition = Math.max(0, 1 - (bpmDelta + energyDelta + valenceDelta + aggressivenessDelta) / 4);
-
-  // Final: 60% audio smoothness + 40% genre continuity
-  const transition = audioTransition * 0.6 + genreScore * 0.4;
+  const transition = Math.max(0, 1 - (bpmDelta + energyDelta + valenceDelta + aggressivenessDelta) / 4);
 
   // --- fatigue: placeholder (always 1.0 for now) ---
   const fatigue = 1.0;
@@ -140,9 +148,10 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
   // ---- 4. Weighted sum ----
   const score =
     weights.stateSimilarity * stateSimilarity +
+    weights.genre * genre +
     weights.preference * preference +
-    weights.novelty * novelty +
     weights.transition * transition +
+    weights.novelty * novelty +
     weights.fatigue * fatigue +
     weights.context * contextScore +
     weights.recency * recency;

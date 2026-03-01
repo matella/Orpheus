@@ -9,6 +9,8 @@ export interface StateVector {
   valence: number;
   tempo: number;
   genreCluster: string | null;
+  /** Running genre frequency counts for the session. */
+  genreCounts: Map<string, number>;
   familiarity: number;
   vocalness: number;
   aggressiveness: number;

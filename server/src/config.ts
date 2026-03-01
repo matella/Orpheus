@@ -5,9 +5,9 @@ dotenv.config();
 
 const configSchema = z.object({
   spotify: z.object({
-    clientId: z.string().min(1, 'SPOTIFY_CLIENT_ID is required'),
-    clientSecret: z.string().min(1, 'SPOTIFY_CLIENT_SECRET is required'),
-    redirectUri: z.string().url('SPOTIFY_REDIRECT_URI must be a valid URL'),
+    clientId: z.string().min(1, { error: 'SPOTIFY_CLIENT_ID is required' }),
+    clientSecret: z.string().min(1, { error: 'SPOTIFY_CLIENT_SECRET is required' }),
+    redirectUri: z.string().url({ error: 'SPOTIFY_REDIRECT_URI must be a valid URL' }),
   }),
   server: z.object({
     port: z.number().int().positive(),

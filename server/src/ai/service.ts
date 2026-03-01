@@ -90,6 +90,7 @@ function gatherSessionContext(sessionId: number): SessionContext | null {
       valence: last.valence ?? 0.5,
       tempo: last.tempo ?? 120,
       genreCluster: last.genre_cluster,
+      genreCounts: new Map(last.genre_cluster ? [[last.genre_cluster, 1]] : []),
       familiarity: last.familiarity ?? 0.5,
       vocalness: last.vocalness ?? 0.5,
       aggressiveness: last.aggressiveness ?? 0.3,
@@ -167,8 +168,8 @@ export async function analyzeSession(sessionId: number): Promise<WeightSuggestio
 
     // Validate and clamp all weight multipliers
     const weightKeys = [
-      'stateSimilarity', 'preference', 'novelty', 'transition',
-      'fatigue', 'context', 'recency',
+      'stateSimilarity', 'genre', 'preference', 'transition',
+      'novelty', 'fatigue', 'context', 'recency',
     ] as const;
 
     for (const key of weightKeys) {

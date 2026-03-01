@@ -57,6 +57,7 @@ export class StateVectorManager {
         valence: clamp(prefs.avg_valence, 0, 1),
         tempo: clamp(prefs.avg_tempo, 40, 250),
         genreCluster: prefs.preferred_genres,
+        genreCounts: new Map(prefs.preferred_genres ? [[prefs.preferred_genres, 1]] : []),
         familiarity: clamp(prefs.avg_familiarity, 0, 1),
         vocalness: clamp(prefs.avg_vocalness, 0, 1),
         aggressiveness: clamp(prefs.avg_aggressiveness, 0, 1),
@@ -71,6 +72,7 @@ export class StateVectorManager {
       valence: 0.5,
       tempo: 120,
       genreCluster: null,
+      genreCounts: new Map(),
       familiarity: 0.5,
       vocalness: 0.5,
       aggressiveness: 0.3,
@@ -114,8 +116,24 @@ export class StateVectorManager {
     state.aggressiveness =
       state.aggressiveness * (1 - alpha) + (track.aggressiveness ?? 0.3) * alpha;
 
-    // Genre cluster: take the latest track's genre
-    state.genreCluster = track.genre_cluster;
+    // Genre cluster: track frequency and use the dominant genre in this session.
+    // This prevents a single outlier track from flipping the reference genre.
+    if (track.genre_cluster) {
+      state.genreCounts.set(
+        track.genre_cluster,
+        (state.genreCounts.get(track.genre_cluster) ?? 0) + 1,
+      );
+      // Determine dominant genre
+      let maxCount = 0;
+      let dominant: string | null = null;
+      for (const [genre, count] of state.genreCounts) {
+        if (count > maxCount) {
+          maxCount = count;
+          dominant = genre;
+        }
+      }
+      state.genreCluster = dominant;
+    }
 
     // Fatigue: ratio of skips to total tracks
     state.fatigueLevel =
