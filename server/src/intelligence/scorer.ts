@@ -55,10 +55,15 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     }
   }
 
-  // Normalize so weights sum to 1.0
+  // Normalize so weights sum to 1.0 (with safety guard for zero/negative sums)
   const weightSum = Object.values(weights).reduce((a, b) => a + b, 0);
-  for (const key of Object.keys(weights)) {
-    weights[key] /= weightSum;
+  if (weightSum <= 0) {
+    // All weights zeroed out — reset to safe defaults
+    Object.assign(weights, DEFAULT_WEIGHTS);
+  } else {
+    for (const key of Object.keys(weights)) {
+      weights[key] /= weightSum;
+    }
   }
 
   // ---- 2. Steering-adjusted target state ----
@@ -71,16 +76,20 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
   // ---- 3. Dimension scores (each 0-1) ----
 
   // --- stateSimilarity: Euclidean distance in 5D ---
+  // All dimensions normalized to [0, 1] for equal weighting.
+  // Tempo uses relative delta (consistent with transition score) clamped to [0, 1].
   const trackVocalness = 1 - (track.instrumentalness ?? 0.5);
+  const tempoDiff = Math.min(1, Math.abs((track.tempo ?? 120) - state.tempo) / Math.max(1, state.tempo));
   const diffs = [
     (track.energy ?? 0.5) - targetEnergy,
     (track.valence ?? 0.5) - targetValence,
-    (track.tempo ?? 120) / 200 - state.tempo / 200,
+    tempoDiff * Math.sign((track.tempo ?? 120) - state.tempo), // Signed relative tempo diff [−1, 1]
     trackVocalness - targetVocalness,
     (track.aggressiveness ?? 0.3) - targetAggressiveness,
   ];
   const distance = Math.sqrt(diffs.reduce((sum, d) => sum + d * d, 0));
-  const stateSimilarity = Math.max(0, 1 - distance / 2);
+  // Normalize by sqrt(N) — max distance in N-dimensional unit space
+  const stateSimilarity = Math.max(0, 1 - distance / Math.sqrt(diffs.length));
 
   // --- preference + recency: single DB query for both ---
   const prefRow = getPreference(track.id);

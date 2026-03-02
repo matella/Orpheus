@@ -3,11 +3,12 @@ import {
   setCacheValue,
   cleanExpiredCache,
   getTotalListeningTime,
+  getTotalTracksPlayed,
   getSkipRate,
   getCompletionRate,
   getDiscoveryRate,
 } from '../../database/repositories/analytics.repo.js';
-import { getTrackStats } from '../../database/repositories/track.repo.js';
+import { computeListeningStats } from '../../database/repositories/listening-stats.repo.js';
 import { logger } from '../../shared/logger.js';
 
 /**
@@ -22,7 +23,7 @@ export function registerAnalyticsComputeTask(): void {
       logger.info('Computing analytics cache...');
 
       const totalListeningMs = getTotalListeningTime(30);
-      const stats = getTrackStats();
+      const tracksPlayed = getTotalTracksPlayed(30);
       const skipRate = getSkipRate(7);
       const completionRate = getCompletionRate(7);
       const discoveryRate = getDiscoveryRate(30);
@@ -30,7 +31,7 @@ export function registerAnalyticsComputeTask(): void {
       const overview = {
         totalListeningMs,
         totalListeningHours: Math.round((totalListeningMs / 3600000) * 10) / 10,
-        totalTracksPlayed: stats.total,
+        totalTracksPlayed: tracksPlayed,
         skipRate,
         completionRate,
         discoveryRate,
@@ -39,6 +40,10 @@ export function registerAnalyticsComputeTask(): void {
       };
 
       setCacheValue('analytics:overview', overview, 24);
+
+      // Refresh listening-stats cache (default 30-day window)
+      const listeningStats = computeListeningStats(30);
+      setCacheValue('analytics:listening_stats:30', listeningStats, 24);
 
       // Clean up expired cache entries
       const cleaned = cleanExpiredCache();

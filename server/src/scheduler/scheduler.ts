@@ -38,6 +38,9 @@ export function startScheduler(): void {
   }
 }
 
+/** Maximum time a single task is allowed to run before being considered stuck. */
+const TASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 async function executeTask(task: ScheduledTask): Promise<void> {
   // Skip if already running (prevent overlap)
   if (runningTasks.has(task.name)) {
@@ -57,10 +60,18 @@ async function executeTask(task: ScheduledTask): Promise<void> {
 
   try {
     logger.info({ name: task.name }, 'Running scheduled task');
-    await task.handler();
+    await Promise.race([
+      task.handler(),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Task "${task.name}" timed out after ${TASK_TIMEOUT_MS / 1000}s`)),
+          TASK_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     logger.info({ name: task.name, durationMs: Date.now() - start }, 'Scheduled task complete');
   } catch (error) {
-    logger.error({ name: task.name, err: error }, 'Scheduled task failed');
+    logger.error({ name: task.name, err: error, durationMs: Date.now() - start }, 'Scheduled task failed');
   } finally {
     runningTasks.delete(task.name);
   }

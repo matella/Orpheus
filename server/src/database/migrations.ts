@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 /**
  * Run all database migrations.
@@ -20,6 +20,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 3) {
     migrateV3(db);
+  }
+
+  if (version < 4) {
+    migrateV4(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -247,11 +251,15 @@ function migrateV2(db: DatabaseSync): void {
 function migrateV3(db: DatabaseSync): void {
   logger.info('Running migration v3: AI reasoning layer');
 
-  db.exec(`
-    -- Add session name column for AI-generated names
-    ALTER TABLE sessions ADD COLUMN session_name TEXT;
+  // ALTER TABLE is not idempotent — check if column already exists before adding.
+  // This prevents a crash if V3 ran partially (column added but version not bumped).
+  const columns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  const hasSessionName = columns.some((c) => c.name === 'session_name');
+  if (!hasSessionName) {
+    db.prepare('ALTER TABLE sessions ADD COLUMN session_name TEXT').run();
+  }
 
-    -- Monthly AI-generated listening recaps
+  db.prepare(`
     CREATE TABLE IF NOT EXISTS monthly_recaps (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       year        INTEGER NOT NULL,
@@ -260,9 +268,42 @@ function migrateV3(db: DatabaseSync): void {
       stats       TEXT NOT NULL,
       created_at  TEXT DEFAULT (datetime('now')),
       UNIQUE(year, month)
-    );
-  `);
+    )
+  `).run();
 
   setSchemaVersion(db, 3);
   logger.info('Migration v3 complete');
+}
+
+function migrateV4(db: DatabaseSync): void {
+  logger.info('Running migration v4: Spotify listening data integration');
+
+  db.exec(`
+    -- Top artists synced from Spotify across time ranges
+    CREATE TABLE IF NOT EXISTS spotify_top_artists (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      spotify_id  TEXT NOT NULL,
+      name        TEXT NOT NULL,
+      genres      TEXT,
+      popularity  INTEGER,
+      image_url   TEXT,
+      time_range  TEXT NOT NULL,
+      rank        INTEGER NOT NULL,
+      synced_at   TEXT DEFAULT (datetime('now')),
+      UNIQUE(spotify_id, time_range)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_top_artists_time_range ON spotify_top_artists(time_range);
+    CREATE INDEX IF NOT EXISTS idx_top_artists_rank ON spotify_top_artists(rank);
+
+    -- Precomputed aggregate listening stats
+    CREATE TABLE IF NOT EXISTS spotify_listening_stats (
+      key         TEXT PRIMARY KEY,
+      value       TEXT NOT NULL,
+      computed_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  setSchemaVersion(db, 4);
+  logger.info('Migration v4 complete');
 }

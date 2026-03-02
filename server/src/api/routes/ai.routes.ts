@@ -60,7 +60,7 @@ export async function aiRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/suggestions', async (request) => {
     const query = request.query as { sessionId?: string; limit?: string };
     const sessionId = query.sessionId ? parseInt(query.sessionId, 10) : undefined;
-    const limit = query.limit ? parseInt(query.limit, 10) : 20;
+    const limit = Math.min(query.limit ? parseInt(query.limit, 10) || 20 : 20, 100);
 
     const suggestions = getAiSuggestions(sessionId, limit);
     return { suggestions };
@@ -125,6 +125,14 @@ export async function aiRoutes(fastify: FastifyInstance): Promise<void> {
     const targetDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const year = body?.year ?? targetDate.getFullYear();
     const month = body?.month ?? (targetDate.getMonth() + 1);
+
+    // Validate year/month ranges
+    if (!Number.isInteger(year) || year < 2020 || year > now.getFullYear() + 1) {
+      return reply.status(400).send({ error: `Invalid year: ${year}` });
+    }
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      return reply.status(400).send({ error: `Invalid month: ${month}` });
+    }
 
     // Gather stats for the month
     const startDate = new Date(year, month - 1, 1);

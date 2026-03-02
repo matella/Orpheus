@@ -39,15 +39,20 @@ class IntelligenceSelector {
 
   /**
    * Start tracking a new session.
+   * @param skipStateInit When true, skip the default state vector initialization.
+   *   Use this when the caller will seed the state vector separately
+   *   (e.g. via `stateVectorManager.seedFromTracks()`).
    */
-  initSession(sessionId: number): void {
+  initSession(sessionId: number, skipStateInit = false): void {
     this.recentTrackIds = [];
     this.recentArtists = [];
     this.sessionSkipCount = 0;
     this.sessionTrackCount = 0;
     this.targetGenre = null;
-    stateVectorManager.initSession(sessionId);
-    logger.info({ sessionId }, 'Intelligence selector session initialized');
+    if (!skipStateInit) {
+      stateVectorManager.initSession(sessionId);
+    }
+    logger.info({ sessionId, skipStateInit }, 'Intelligence selector session initialized');
   }
 
   /**
@@ -69,8 +74,12 @@ class IntelligenceSelector {
    * Returns null if no suitable candidates exist.
    */
   selectNextTrack(sessionId: number, excludeIds?: Set<number>): TrackRow | null {
-    // 1. Get current state vector
+    // 1. Get current state vector (null if session was cleaned up during a race)
     const stateVector = stateVectorManager.getState(sessionId);
+    if (!stateVector) {
+      logger.warn({ sessionId }, 'selectNextTrack: state vector unavailable — session may have ended');
+      return null;
+    }
 
     // 2. Load steering controls
     const steering = loadSteeringControls();

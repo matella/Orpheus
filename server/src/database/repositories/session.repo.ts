@@ -88,6 +88,7 @@ export function getSessionById(id: number): SessionRow | null {
 
 /**
  * Get recent sessions (paginated).
+ * Excludes empty sessions (0 tracks) since they carry no useful data.
  */
 export function getSessionHistory(limit: number = 20, offset: number = 0): {
   sessions: SessionRow[];
@@ -95,10 +96,31 @@ export function getSessionHistory(limit: number = 20, offset: number = 0): {
 } {
   const db = getDb();
   const sessions = db.prepare(
-    'SELECT * FROM sessions ORDER BY started_at DESC LIMIT ? OFFSET ?',
+    'SELECT * FROM sessions WHERE track_count > 0 ORDER BY started_at DESC LIMIT ? OFFSET ?',
   ).all(limit, offset) as unknown as SessionRow[];
-  const total = (db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }).count;
+  const total = (db.prepare('SELECT COUNT(*) as count FROM sessions WHERE track_count > 0').get() as { count: number }).count;
   return { sessions, total };
+}
+
+/**
+ * Delete a session and all its related data (used for empty sessions with 0 tracks).
+ * Removes child rows from referencing tables first to satisfy foreign key constraints.
+ */
+export function deleteSession(sessionId: number): void {
+  const db = getDb();
+  // Wrap in savepoint to prevent partial deletes on crash
+  db.prepare('SAVEPOINT delete_session').run();
+  try {
+    db.prepare('DELETE FROM interactions WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM state_history WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM steering_history WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM ai_suggestions WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    db.prepare('RELEASE delete_session').run();
+  } catch (err) {
+    db.prepare('ROLLBACK TO delete_session').run();
+    throw err;
+  }
 }
 
 /**

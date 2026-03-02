@@ -40,7 +40,11 @@ class ApiService {
   /// Get Spotify auth URL
   Future<String> getAuthUrl() async {
     final response = await _dio.get('/auth/login');
-    return response.data['url'];
+    final url = response.data['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('No auth URL returned from server');
+    }
+    return url;
   }
 
   /// Health check

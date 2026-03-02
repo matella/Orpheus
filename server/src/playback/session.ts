@@ -2,6 +2,7 @@ import { logger } from '../shared/logger.js';
 import {
   createSession,
   endSession as endDbSession,
+  deleteSession as deleteDbSession,
   getActiveSession,
   incrementTrackCount,
 } from '../database/repositories/session.repo.js';
@@ -21,11 +22,16 @@ export class SessionManager {
     initialContext?: string;
     autoStarted?: boolean;
   }): number {
-    // End any stale session
+    // Clean up any stale session
     const existing = getActiveSession();
     if (existing) {
-      logger.warn({ id: existing.id }, 'Ending stale session before starting new one');
-      endDbSession(existing.id);
+      if (existing.track_count === 0) {
+        logger.warn({ id: existing.id }, 'Deleting stale empty session before starting new one');
+        deleteDbSession(existing.id);
+      } else {
+        logger.warn({ id: existing.id }, 'Ending stale session before starting new one');
+        endDbSession(existing.id);
+      }
     }
 
     const sessionId = createSession(data);
@@ -36,18 +42,30 @@ export class SessionManager {
 
   /**
    * End the current session.
+   * If the session has 0 tracks, deletes it entirely instead of persisting.
+   * Returns true if the session was kept, false if it was deleted (empty).
    */
   end(stats?: {
     trackCount?: number;
     totalDurationMs?: number;
     avgEnergy?: number;
     avgValence?: number;
-  }): void {
-    if (this.activeSessionId === null) return;
+  }): boolean {
+    if (this.activeSessionId === null) return false;
+
+    const isEmpty = (stats?.trackCount ?? 0) === 0;
+
+    if (isEmpty) {
+      deleteDbSession(this.activeSessionId);
+      logger.info({ sessionId: this.activeSessionId }, 'Empty session deleted (0 tracks)');
+      this.activeSessionId = null;
+      return false;
+    }
 
     endDbSession(this.activeSessionId, stats);
     logger.info({ sessionId: this.activeSessionId, ...stats }, 'Session ended');
     this.activeSessionId = null;
+    return true;
   }
 
   /**

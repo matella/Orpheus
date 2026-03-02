@@ -20,6 +20,7 @@ export interface PlaybackTrack {
   genreCluster: string | null;
   aggressiveness: number | null;
   familiarityScore: number;
+  adopted?: boolean;          // True if adopted from existing Spotify queue at startup
 }
 
 export interface EngineState {
@@ -30,6 +31,9 @@ export interface EngineState {
   currentTrackSpotifyId: string | null;
   trackCount: number;
   startedAt: string | null;
+  transitionMode: 'none' | 'observing' | 'autonomous';
+  adoptedTrackCount: number;
+  coherenceScore: number | null;
 }
 
 /**
@@ -56,5 +60,6 @@ export function toPlaybackTrack(row: TrackRow): PlaybackTrack {
     genreCluster: row.genre_cluster,
     aggressiveness: row.aggressiveness,
     familiarityScore: row.familiarity_score,
+    adopted: false,
   };
 }

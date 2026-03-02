@@ -97,7 +97,9 @@ class _FeedbackButtonState extends State<_FeedbackButton>
   }
 
   void _handleTap() {
-    _controller.forward().then((_) => _controller.reverse());
+    _controller.forward().then((_) {
+      if (mounted) _controller.reverse();
+    });
     widget.onTap?.call();
   }
 

@@ -313,7 +313,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   Widget _buildSessionCard(BuildContext context, dynamic session) {
     final energyCurve = (session['energyCurve'] as List<dynamic>?)
-            ?.map<double>((e) => (e as num).toDouble())
+            ?.whereType<num>()
+            .map<double>((e) => e.toDouble())
             .toList() ??
         [];
     final trackCount = session['trackCount'] ?? 0;

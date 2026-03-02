@@ -11,7 +11,7 @@ import { engine } from './playback/engine.js';
 
 async function main() {
   logger.info('');
-  logger.info('  ♪ ORPHEUS — Autonomous Music Intelligence');
+  logger.info('  ORPHEUS -- Autonomous Music Intelligence');
   logger.info('');
 
   // Initialize database

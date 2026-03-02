@@ -10,7 +10,7 @@ const configSchema = z.object({
     redirectUri: z.string().url({ error: 'SPOTIFY_REDIRECT_URI must be a valid URL' }),
   }),
   server: z.object({
-    port: z.number().int().positive(),
+    port: z.number().int().min(1).max(65535),
     host: z.string().min(1),
   }),
   database: z.object({

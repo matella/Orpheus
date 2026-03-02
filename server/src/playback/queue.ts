@@ -76,17 +76,6 @@ export class TrackQueue {
     logger.debug({ track: track.name, artist: track.artist }, 'Queue: set next');
   }
 
-  /** Set the buffer track (lookahead[1]). Replaces if already occupied. */
-  setBuffer(track: PlaybackTrack): void {
-    while (this.lookahead.length < 2) {
-      // This should only happen if lookahead is empty and we're setting buffer directly.
-      // Push a placeholder that will be overwritten immediately.
-      this.lookahead.push(null as unknown as PlaybackTrack);
-    }
-    this.lookahead[1] = track;
-    logger.debug({ track: track.name, artist: track.artist }, 'Queue: set buffer');
-  }
-
   /** Append a track to the end of the lookahead. */
   pushLookahead(track: PlaybackTrack): void {
     this.lookahead.push(track);
@@ -120,10 +109,6 @@ export class TrackQueue {
 
   needsNext(): boolean {
     return this.lookahead.length === 0;
-  }
-
-  needsBuffer(): boolean {
-    return this.lookahead.length < 2;
   }
 
   /** Whether the lookahead has fewer tracks than the target. */

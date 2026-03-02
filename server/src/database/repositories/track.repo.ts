@@ -67,30 +67,38 @@ export function upsertTrack(data: UpsertTrackData): number {
  */
 export function upsertTracks(tracks: UpsertTrackData[]): void {
   const db = getDb();
-  const stmt = db.prepare(`
-    INSERT INTO tracks (spotify_id, name, artist, artist_id, album, album_art_url, duration_ms, source, cached_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    ON CONFLICT(spotify_id) DO UPDATE SET
-      name = excluded.name,
-      artist = excluded.artist,
-      artist_id = excluded.artist_id,
-      album = excluded.album,
-      album_art_url = excluded.album_art_url,
-      duration_ms = excluded.duration_ms,
-      cached_at = datetime('now')
-  `);
 
-  for (const t of tracks) {
-    stmt.run(
-      t.spotifyId,
-      t.name,
-      t.artist,
-      t.artistId ?? null,
-      t.album ?? null,
-      t.albumArtUrl ?? null,
-      t.durationMs,
-      t.source ?? 'library',
-    );
+  db.prepare('SAVEPOINT upsert_tracks').run();
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO tracks (spotify_id, name, artist, artist_id, album, album_art_url, duration_ms, source, cached_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(spotify_id) DO UPDATE SET
+        name = excluded.name,
+        artist = excluded.artist,
+        artist_id = excluded.artist_id,
+        album = excluded.album,
+        album_art_url = excluded.album_art_url,
+        duration_ms = excluded.duration_ms,
+        cached_at = datetime('now')
+    `);
+
+    for (const t of tracks) {
+      stmt.run(
+        t.spotifyId,
+        t.name,
+        t.artist,
+        t.artistId ?? null,
+        t.album ?? null,
+        t.albumArtUrl ?? null,
+        t.durationMs,
+        t.source ?? 'library',
+      );
+    }
+    db.prepare('RELEASE upsert_tracks').run();
+  } catch (err) {
+    db.prepare('ROLLBACK TO upsert_tracks').run();
+    throw err;
   }
 }
 

@@ -3,6 +3,7 @@ import {
   getCacheValue,
   setCacheValue,
   getTotalListeningTime,
+  getTotalTracksPlayed,
   getSkipRate,
   getCompletionRate,
   getDiscoveryRate,
@@ -11,7 +12,7 @@ import {
   getTopTracks,
   getDailyListeningStats,
 } from '../../database/repositories/analytics.repo.js';
-import { getTrackStats } from '../../database/repositories/track.repo.js';
+import { computeListeningStats, type ListeningStatsData } from '../../database/repositories/listening-stats.repo.js';
 
 interface OverviewData {
   totalListeningMs: number;
@@ -44,7 +45,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
     if (cached) return cached;
 
     const totalListeningMs = getTotalListeningTime(30);
-    const stats = getTrackStats();
+    const tracksPlayed = getTotalTracksPlayed(30);
     const skipRate = getSkipRate(7);
     const completionRate = getCompletionRate(7);
     const discoveryRate = getDiscoveryRate(30);
@@ -52,7 +53,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
     const overview: OverviewData = {
       totalListeningMs,
       totalListeningHours: Math.round((totalListeningMs / 3600000) * 10) / 10,
-      totalTracksPlayed: stats.total,
+      totalTracksPlayed: tracksPlayed,
       skipRate,
       completionRate,
       discoveryRate,
@@ -143,5 +144,24 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
 
     const daily = getDailyListeningStats(days);
     return { daily };
+  });
+
+  /**
+   * GET /api/analytics/listening-stats
+   * Comprehensive listening stats combining Orpheus + Spotify data.
+   */
+  fastify.get('/listening-stats', async (request) => {
+    const query = request.query as { days?: string };
+    const days = parseInt(query.days ?? '30', 10) || 30;
+
+    // Try cache first (cache key includes days param to avoid stale cross-window results)
+    const cacheKey = `analytics:listening_stats:${days}`;
+    const cached = getCacheValue<ListeningStatsData>(cacheKey);
+    if (cached) return { ...cached, cached: true };
+
+    // Compute on demand
+    const stats = computeListeningStats(days);
+    setCacheValue(cacheKey, stats, 24);
+    return { ...stats, cached: false };
   });
 }

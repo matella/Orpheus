@@ -102,3 +102,15 @@ export interface MonthlyRecapRow {
   stats: string;
   created_at: string;
 }
+
+export interface SpotifyTopArtistRow {
+  id: number;
+  spotify_id: string;
+  name: string;
+  genres: string | null;
+  popularity: number | null;
+  image_url: string | null;
+  time_range: string;
+  rank: number;
+  synced_at: string;
+}

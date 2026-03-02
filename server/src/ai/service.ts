@@ -11,8 +11,12 @@ import { getStateHistory } from '../database/repositories/state-history.repo.js'
 import { getSessionInteractions } from '../database/repositories/interaction.repo.js';
 import { getSessionById, updateSessionName } from '../database/repositories/session.repo.js';
 import { insertAiSuggestion } from '../database/repositories/ai-suggestion.repo.js';
+import { getTopPreferences } from '../database/repositories/preference.repo.js';
+import { getTopArtistNames, getTopArtistGenreDistribution } from '../database/repositories/top-artists.repo.js';
+import { getTrackById } from '../database/repositories/track.repo.js';
 import { loadSteeringControls } from '../intelligence/steering.js';
 import { stateVectorManager } from '../intelligence/state-vector.js';
+import { engine } from '../playback/engine.js';
 import { broadcast } from '../api/websocket.js';
 import { generate, generateJson } from './ollama.js';
 import {
@@ -25,6 +29,7 @@ import {
   buildPromptParsePrompt,
   buildArtistSuggestionPrompt,
   type ArtistSuggestion,
+  type SpotifyGlobalContext,
   type WeightSuggestion,
   type SessionNameSuggestion,
   type InsightSuggestion,
@@ -69,6 +74,47 @@ export function isAiEnabled(): boolean {
   return settings.aiEnabled;
 }
 
+// ── Spotify Global Context ─────────────────────────────────────────
+
+function gatherSpotifyGlobalContext(): SpotifyGlobalContext | null {
+  try {
+    const shortTermArtists = getTopArtistNames('short_term', 10);
+    const mediumTermArtists = getTopArtistNames('medium_term', 10);
+    const artistGenres = getTopArtistGenreDistribution();
+
+    // Get top 10 preferred tracks and resolve names
+    const topPrefs = getTopPreferences(10);
+    const topPreferredTracks = topPrefs.map((pref) => {
+      const track = getTrackById(pref.track_id);
+      return {
+        name: track?.name ?? 'Unknown',
+        artist: track?.artist ?? 'Unknown',
+        score: pref.score,
+      };
+    });
+
+    // Build a concise listening profile string
+    const parts: string[] = [];
+    if (shortTermArtists.length > 0) {
+      parts.push(`Recently listening to: ${shortTermArtists.slice(0, 5).join(', ')}`);
+    }
+    if (artistGenres.length > 0) {
+      parts.push(`Dominant genres: ${artistGenres.slice(0, 5).map((g) => g.genre).join(', ')}`);
+    }
+
+    return {
+      topArtistsShortTerm: shortTermArtists,
+      topArtistsMediumTerm: mediumTermArtists,
+      dominantGenres: artistGenres.slice(0, 10),
+      topPreferredTracks,
+      listeningProfile: parts.join('. ') || 'No listening data available yet.',
+    };
+  } catch (err) {
+    logger.warn({ err }, 'Failed to gather Spotify global context');
+    return null;
+  }
+}
+
 // ── Context Gathering ──────────────────────────────────────────────
 
 function gatherSessionContext(sessionId: number): SessionContext | null {
@@ -78,19 +124,25 @@ function gatherSessionContext(sessionId: number): SessionContext | null {
   const stateHistory = getStateHistory(sessionId);
   const interactions = getSessionInteractions(sessionId);
 
-  let currentState;
-  try {
-    currentState = stateVectorManager.getState(sessionId);
-  } catch {
-    // Session state not initialized — use last history entry or defaults
+  let currentState = stateVectorManager.getState(sessionId);
+  if (!currentState) {
+    // Session state not initialized — use last history entry or defaults.
+    // Rebuild genreCounts from the full state history (not just the last entry)
+    // so the AI prompt sees the real genre distribution.
     const last = stateHistory[stateHistory.length - 1];
     if (!last) return null;
+    const fallbackGenreCounts = new Map<string, number>();
+    for (const entry of stateHistory) {
+      if (entry.genre_cluster) {
+        fallbackGenreCounts.set(entry.genre_cluster, (fallbackGenreCounts.get(entry.genre_cluster) ?? 0) + 1);
+      }
+    }
     currentState = {
       energy: last.energy ?? 0.5,
       valence: last.valence ?? 0.5,
       tempo: last.tempo ?? 120,
       genreCluster: last.genre_cluster,
-      genreCounts: new Map(last.genre_cluster ? [[last.genre_cluster, 1]] : []),
+      genreCounts: fallbackGenreCounts,
       familiarity: last.familiarity ?? 0.5,
       vocalness: last.vocalness ?? 0.5,
       aggressiveness: last.aggressiveness ?? 0.3,
@@ -136,6 +188,19 @@ function gatherSessionContext(sessionId: number): SessionContext | null {
     completionRatio: i.completion_ratio,
   }));
 
+  // Gather global Spotify listening context for AI enrichment
+  const spotifyGlobal = gatherSpotifyGlobalContext();
+
+  // Gather transition context if engine is in a transition state
+  const engineState = engine.getState();
+  const transitionContext = engineState.transitionMode !== 'none'
+    ? {
+        adoptedTrackCount: engineState.adoptedTrackCount,
+        coherenceScore: engineState.coherenceScore ?? 0,
+        transitionMode: engineState.transitionMode as 'observing' | 'autonomous',
+      }
+    : null;
+
   return {
     sessionId,
     trackCount: session.track_count,
@@ -145,6 +210,8 @@ function gatherSessionContext(sessionId: number): SessionContext | null {
     recentInteractions,
     skipRate,
     dominantGenres,
+    spotifyGlobal,
+    transitionContext,
   };
 }
 

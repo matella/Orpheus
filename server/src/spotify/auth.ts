@@ -150,6 +150,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
+    signal: AbortSignal.timeout(10_000), // 10s timeout — prevents hanging forever
   });
 
   if (!response.ok) {

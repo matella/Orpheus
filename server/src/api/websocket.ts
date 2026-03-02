@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket';
 import type { WebSocket } from 'ws';
 import { logger } from '../shared/logger.js';
 import { engine } from '../playback/engine.js';
+import type { TrajectoryPoint } from '../playback/engine.js';
 
 const clients = new Set<WebSocket>();
 
@@ -16,13 +17,14 @@ export async function registerWebSocket(server: FastifyInstance): Promise<void> 
     clients.add(socket);
     logger.info({ clientCount: clients.size }, 'WebSocket client connected');
 
-    // Send current state on connect
+    // Send current state on connect (including trajectory for flow indicator)
     const state = engine.getState();
     const current = engine.getCurrentTrack();
     const next = engine.getNextTrack();
+    const trajectory = engine.getTrajectory();
     safeSend(socket, {
       type: 'state_updated',
-      data: { state, current, next },
+      data: { state, current, next, trajectory },
     });
 
     socket.on('close', () => {
@@ -55,6 +57,10 @@ export function wireEngineEvents(): void {
 
   engine.on('state_updated', (data) => {
     broadcast({ type: 'state_updated', data });
+  });
+
+  engine.on('transition_complete', (data) => {
+    broadcast({ type: 'transition_complete', data });
   });
 }
 

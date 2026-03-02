@@ -19,6 +19,7 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
   bool _isLoading = true;
   bool _isAnalyzing = false;
   bool _isGeneratingRecap = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -26,24 +27,39 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
     _loadData();
   }
 
+  /// Load each AI endpoint independently so a single failure
+  /// doesn't blank the entire page.
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    int failures = 0;
+
+    _aiStatus = await _safeLoad(() => apiService.getAiStatus(), () => failures++);
+    final suggestionsResult = await _safeLoad<List<dynamic>>(() => apiService.getAiSuggestions(), () => failures++);
+    _suggestions = suggestionsResult ?? [];
+    final recapsData = await _safeLoad(() => apiService.getAiRecaps(), () => failures++);
+    _recaps = (recapsData?['recaps'] as List<dynamic>?) ?? [];
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (failures == 3) {
+        _errorMessage = 'Could not load AI data. Check server connection.';
+      } else if (failures > 0) {
+        _errorMessage = 'Some AI data could not be loaded.';
+      }
+    });
+  }
+
+  Future<T?> _safeLoad<T>(Future<T> Function() loader, [VoidCallback? onError]) async {
     try {
-      final results = await Future.wait([
-        apiService.getAiStatus(),
-        apiService.getAiSuggestions(),
-        apiService.getAiRecaps(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _aiStatus = results[0] as Map<String, dynamic>;
-        _suggestions = results[1] as List<dynamic>;
-        _recaps = (results[2] as Map<String, dynamic>)['recaps'] ?? [];
-        _isLoading = false;
-      });
+      return await loader();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      onError?.call();
+      return null;
     }
   }
 
@@ -330,7 +346,10 @@ class _IntelligenceScreenState extends State<IntelligenceScreen> {
                   'November',
                   'December'
                 ];
-                final monthName = monthNames[r['month'] ?? 1];
+                final monthIdx = (r['month'] as int?) ?? 1;
+                final monthName = (monthIdx >= 1 && monthIdx <= 12)
+                    ? monthNames[monthIdx]
+                    : 'Unknown';
                 final year = r['year'] ?? 2026;
                 final stats = r['stats'] as Map<String, dynamic>? ?? {};
                 final personality = stats['personality'] ?? '';

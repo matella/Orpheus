@@ -47,6 +47,20 @@ export interface ContextInferenceSuggestion {
 
 // ── Context Interfaces ─────────────────────────────────────────────
 
+export interface SpotifyGlobalContext {
+  topArtistsShortTerm: string[];
+  topArtistsMediumTerm: string[];
+  dominantGenres: { genre: string; count: number }[];
+  topPreferredTracks: { name: string; artist: string; score: number }[];
+  listeningProfile: string;
+}
+
+export interface TransitionContext {
+  adoptedTrackCount: number;
+  coherenceScore: number;
+  transitionMode: 'observing' | 'autonomous';
+}
+
 export interface SessionContext {
   sessionId: number;
   trackCount: number;
@@ -66,6 +80,8 @@ export interface SessionContext {
   }[];
   skipRate: number;
   dominantGenres: string[];
+  spotifyGlobal?: SpotifyGlobalContext | null;
+  transitionContext?: TransitionContext | null;
 }
 
 export interface SessionSummary {
@@ -112,14 +128,27 @@ ${trajectory}
 
 RECENT INTERACTIONS:
 ${interactions}
+${ctx.spotifyGlobal ? `
+LISTENER PROFILE (from Spotify data):
+- ${ctx.spotifyGlobal.listeningProfile}
+- Top recent artists: ${ctx.spotifyGlobal.topArtistsShortTerm.slice(0, 5).join(', ') || 'unknown'}
+- Dominant genres: ${ctx.spotifyGlobal.dominantGenres.slice(0, 5).map((g) => g.genre).join(', ') || 'mixed'}
+- Most preferred tracks: ${ctx.spotifyGlobal.topPreferredTracks.slice(0, 3).map((t) => `${t.name} by ${t.artist}`).join(', ') || 'unknown'}
+` : ''}${ctx.transitionContext ? `
+TRANSITION CONTEXT:
+- Session started by integrating with ${ctx.transitionContext.adoptedTrackCount} existing queue tracks
+- Queue coherence score: ${ctx.transitionContext.coherenceScore.toFixed(2)}
+- Current mode: ${ctx.transitionContext.transitionMode}
+- Note: Prioritize smooth continuation from the adopted tracks rather than abrupt style changes.
+` : ''}
+TASK: Suggest multipliers for these 8 scoring weights. Each multiplier adjusts how important that dimension is for track selection. Use values between 0.5 (reduce importance) and 2.0 (increase importance). 1.0 means no change.
 
-TASK: Suggest multipliers for these 7 scoring weights. Each multiplier adjusts how important that dimension is for track selection. Use values between 0.5 (reduce importance) and 2.0 (increase importance). 1.0 means no change.
-
-The 7 weights are:
+The 8 weights are:
 - stateSimilarity: How close a candidate matches the current session state
+- genre: How important genre coherence is (staying within the same genre)
 - preference: How much the user historically likes this track
 - novelty: How different/new the track is
-- transition: How smooth the transition would be
+- transition: How smooth the audio transition would be
 - fatigue: Anti-fatigue adjustment
 - context: Time-of-day appropriateness
 - recency: Penalty for recently played tracks
@@ -127,6 +156,7 @@ The 7 weights are:
 Respond with ONLY this JSON format:
 {
   "stateSimilarity": 1.0,
+  "genre": 1.0,
   "preference": 1.0,
   "novelty": 1.0,
   "transition": 1.0,
@@ -161,6 +191,10 @@ export function buildInsightPrompt(ctx: SessionContext): string {
     .map((s) => `energy=${s.energy.toFixed(2)} valence=${s.valence.toFixed(2)}`)
     .join(' -> ');
 
+  const profileLine = ctx.spotifyGlobal?.listeningProfile
+    ? `\n- Listener profile: ${ctx.spotifyGlobal.listeningProfile}`
+    : '';
+
   return `You are a music listening companion. Generate ONE brief, interesting insight about the current listening session.
 
 SESSION:
@@ -168,7 +202,8 @@ SESSION:
 - Skip rate: ${(ctx.skipRate * 100).toFixed(0)}%
 - Genres: ${ctx.dominantGenres.join(', ') || 'varied'}
 - Energy trajectory: ${trajectory}
-- Time: ${ctx.currentState.context}
+- Time: ${ctx.currentState.context}${profileLine}${ctx.transitionContext ? `
+- Transition: Integrated ${ctx.transitionContext.adoptedTrackCount} existing queue tracks (coherence: ${ctx.transitionContext.coherenceScore.toFixed(2)}), now ${ctx.transitionContext.transitionMode}` : ''}
 
 Generate a single conversational insight (under 120 characters) about listening patterns, mood trajectory, or music discovery. Be specific and observational, not generic.
 

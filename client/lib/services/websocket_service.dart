@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
+import 'dart:math' as math;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/constants.dart';
 
@@ -7,11 +9,12 @@ import '../config/constants.dart';
 ///
 /// Connects to the Orpheus server's WebSocket endpoint and provides
 /// a broadcast stream of decoded JSON messages. Auto-reconnects on
-/// disconnect with a 5-second delay.
+/// disconnect with exponential backoff (5s → 10s → 20s → ... capped at 60s).
 class WebSocketService {
   WebSocketChannel? _channel;
   Timer? _reconnectTimer;
   bool _intentionalClose = false;
+  int _reconnectAttempts = 0;
 
   final _controller = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -24,8 +27,11 @@ class WebSocketService {
   bool get isConnected => _isConnected && _channel != null;
 
   /// Connect to the WebSocket server.
+  /// Safe to call multiple times — ignores if already connected or connecting.
   void connect() {
+    if (_channel != null) return; // Already connected or connecting
     _intentionalClose = false;
+    _reconnectAttempts = 0;
     _doConnect();
   }
 
@@ -36,6 +42,8 @@ class WebSocketService {
     _reconnectTimer = null;
     _channel?.sink.close();
     _channel = null;
+    _isConnected = false;
+    _reconnectAttempts = 0;
   }
 
   void _doConnect() {
@@ -44,8 +52,11 @@ class WebSocketService {
 
       _channel!.stream.listen(
         (data) {
-          // Mark as connected on first successful message
-          if (!_isConnected) _isConnected = true;
+          // Mark as connected on first successful message and reset backoff
+          if (!_isConnected) {
+            _isConnected = true;
+            _reconnectAttempts = 0;
+          }
           try {
             final decoded = jsonDecode(data as String) as Map<String, dynamic>;
             _controller.add(decoded);
@@ -53,10 +64,14 @@ class WebSocketService {
             // Ignore malformed messages
           }
         },
-        onError: (_) => _scheduleReconnect(),
+        onError: (error) {
+          developer.log('WebSocket error: $error', name: 'WebSocketService');
+          _scheduleReconnect();
+        },
         onDone: () => _scheduleReconnect(),
       );
-    } catch (_) {
+    } catch (e) {
+      developer.log('WebSocket connect failed: $e', name: 'WebSocketService');
       _scheduleReconnect();
     }
   }
@@ -66,8 +81,16 @@ class WebSocketService {
     _isConnected = false;
     if (_intentionalClose) return;
 
+    _reconnectAttempts++;
+    // Exponential backoff: 5s, 10s, 20s, 40s, capped at 60s
+    final delaySec = math.min(60, 5 * math.pow(2, _reconnectAttempts - 1)).toInt();
+    developer.log(
+      'WebSocket reconnecting in ${delaySec}s (attempt $_reconnectAttempts)',
+      name: 'WebSocketService',
+    );
+
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 5), _doConnect);
+    _reconnectTimer = Timer(Duration(seconds: delaySec), _doConnect);
   }
 
   /// Clean up resources.

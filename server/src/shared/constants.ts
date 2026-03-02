@@ -49,8 +49,16 @@ export const BPM_PROXIMITY_THRESHOLD = 0.25; // Within 25%
 export const ENERGY_PROXIMITY_THRESHOLD = 0.3;
 export const TOP_CANDIDATES_FOR_RANDOM = 3;
 
+// Queue coherence (smooth startup)
+export const QUEUE_COHERENCE_THRESHOLD = 0.5; // Below this, queue is considered incoherent
+export const QUEUE_ANALYSIS_DEPTH = 5;        // Max queue tracks to analyze on startup
+
 // Steering debounce
 export const STEERING_DEBOUNCE_MS = 300;
+
+// Spotify listening data integration
+export const TOP_TRACK_NUDGE_FACTOR = 0.2;          // Fraction of preference gap applied per sync
+export const TOP_TRACK_NUDGE_MIN_THRESHOLD = 0.005;  // Skip negligible preference deltas
 
 // AI integration
 export const AI_ANALYSIS_INTERVAL = 5; // Analyze session every N tracks

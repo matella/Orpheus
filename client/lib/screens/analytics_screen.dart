@@ -19,6 +19,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Map<String, dynamic>? _topTracks;
   Map<String, dynamic>? _daily;
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -26,28 +27,39 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     _loadAllData();
   }
 
+  /// Load each analytics endpoint independently so a single failure
+  /// doesn't blank the entire page.
   Future<void> _loadAllData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    int failures = 0;
+
+    _overview = await _safeLoad(() => apiService.getAnalyticsOverview(), () => failures++);
+    _genres = await _safeLoad(() => apiService.getAnalyticsGenres(), () => failures++);
+    _hours = await _safeLoad(() => apiService.getAnalyticsHours(), () => failures++);
+    _topTracks = await _safeLoad(() => apiService.getAnalyticsTopTracks(), () => failures++);
+    _daily = await _safeLoad(() => apiService.getAnalyticsDaily(), () => failures++);
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (failures == 5) {
+        _errorMessage = 'Could not load analytics. Check server connection.';
+      } else if (failures > 0) {
+        _errorMessage = 'Some analytics data could not be loaded.';
+      }
+    });
+  }
+
+  Future<T?> _safeLoad<T>(Future<T> Function() loader, [VoidCallback? onError]) async {
     try {
-      final results = await Future.wait([
-        apiService.getAnalyticsOverview(),
-        apiService.getAnalyticsGenres(),
-        apiService.getAnalyticsHours(),
-        apiService.getAnalyticsTopTracks(),
-        apiService.getAnalyticsDaily(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _overview = results[0];
-        _genres = results[1];
-        _hours = results[2];
-        _topTracks = results[3];
-        _daily = results[4];
-        _isLoading = false;
-      });
+      return await loader();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      onError?.call();
+      return null;
     }
   }
 
@@ -67,9 +79,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   color: OrpheusColors.lyreGold,
                 ),
               )
-            : _overview == null
-                ? _buildEmptyState(context)
-                : ListView(
+            : _overview == null && _errorMessage != null
+                ? _buildErrorState(context)
+                : _overview == null
+                    ? _buildEmptyState(context)
+                    : ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
                       _buildOverviewCards(context),
@@ -84,6 +98,42 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       const SizedBox(height: 24),
                     ],
                   ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            size: 64,
+            color: OrpheusColors.wineRed,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Connection Error',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _errorMessage ?? 'Could not load analytics.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: _loadAllData,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Retry'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: OrpheusColors.lyreGold,
+              side: const BorderSide(color: OrpheusColors.lyreGold),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -239,7 +289,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       final idx = entry.key;
                       final genre = entry.value;
                       return PieChartSectionData(
-                        value: (genre['count'] as num).toDouble(),
+                        value: (genre['count'] as num?)?.toDouble() ?? 0,
                         color: genreColors[idx % genreColors.length],
                         radius: 50,
                         showTitle: false,
@@ -460,7 +510,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: maxMinutes / 4,
+                  horizontalInterval: (maxMinutes / 4).clamp(1.0, double.infinity),
                   getDrawingHorizontalLine: (_) => FlLine(
                     color: OrpheusColors.slate.withValues(alpha: 0.3),
                     strokeWidth: 1,
@@ -471,7 +521,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 40,
-                      interval: maxMinutes / 4,
+                      interval: (maxMinutes / 4).clamp(1.0, double.infinity),
                       getTitlesWidget: (value, _) => Text(
                         '${value.round()}m',
                         style: GoogleFonts.jetBrainsMono(

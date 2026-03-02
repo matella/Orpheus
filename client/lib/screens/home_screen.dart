@@ -50,6 +50,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _aiStatus = 'unknown';
   String? _latestInsight;
 
+  // Transition state
+  String _transitionMode = 'none';
+  int _adoptedTrackCount = 0;
+  double? _coherenceScore;
+  List<Map<String, dynamic>> _flowTrajectory = [];
+
   // Error
   String? _errorMessage;
   String? _errorCode;
@@ -129,6 +135,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       final type = msg['type'];
       final data = msg['data'] as Map<String, dynamic>?;
+
+      // Handle messages that don't require a data payload first
+      if (type == 'steering_updated') {
+        // Server confirmed steering controls were persisted
+        ref.read(steeringSyncProvider.notifier).setSynced();
+        return;
+      }
+
+      // All remaining message types require a data payload
       if (data == null) return;
 
       switch (type) {
@@ -139,9 +154,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _engineStatus = state['status'] ?? 'idle';
               _trackCount = state['trackCount'] ?? 0;
               _deviceName = state['deviceName'];
+              _transitionMode = state['transitionMode'] ?? 'none';
+              _adoptedTrackCount = state['adoptedTrackCount'] ?? 0;
+              _coherenceScore =
+                  (state['coherenceScore'] as num?)?.toDouble();
             }
             if (data.containsKey('current')) {
               _applyTrack(data['current']);
+            }
+            if (data.containsKey('trajectory')) {
+              _flowTrajectory = List<Map<String, dynamic>>.from(
+                data['trajectory'] as List? ?? [],
+              );
             }
           });
         case 'track_changed':
@@ -167,6 +191,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _trackCount = 0;
             _deviceName = null;
             _isStopping = false;
+            _transitionMode = 'none';
+            _adoptedTrackCount = 0;
+            _coherenceScore = null;
+            _flowTrajectory = [];
+          });
+        case 'transition_complete':
+          setState(() {
+            _transitionMode = 'autonomous';
           });
         case 'ai_insight':
           if (data['insight'] is String) {
@@ -262,7 +294,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
     try {
       await apiService.stopEngine();
-      // WebSocket will push session_ended
+      // WebSocket will push session_ended to clear _isStopping.
+      // Safety fallback: if WS is down and session_ended never arrives,
+      // reset _isStopping after a generous timeout.
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _isStopping) {
+          setState(() {
+            _isStopping = false;
+            _engineStatus = 'idle';
+          });
+        }
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _isStopping = false);
@@ -392,7 +434,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 isPlaying: _isPlaying && _isEngineRunning,
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Flow indicator (when engine is running and trajectory exists)
+              if (_isEngineRunning && _flowTrajectory.length > 1)
+                _buildFlowIndicator(),
+
+              const SizedBox(height: 16),
 
               // Playback controls — previous, play/pause, next
               if (_isEngineRunning) _buildPlaybackControls(),
@@ -488,9 +536,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String statusText;
 
     if (_isEngineRunning) {
-      statusColor = OrpheusColors.laurelGreen;
+      statusColor = _transitionMode == 'observing'
+          ? OrpheusColors.amberGlow
+          : OrpheusColors.laurelGreen;
       final parts = <String>[
-        _engineStatus == 'paused' ? 'Paused' : 'Playing',
+        _transitionMode == 'observing'
+            ? 'Transitioning'
+            : _engineStatus == 'paused'
+                ? 'Paused'
+                : 'Playing',
       ];
       if (_trackCount > 0) parts.add('$_trackCount tracks');
       if (_deviceName != null) parts.add(_deviceName!);
@@ -806,7 +860,120 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildFlowIndicator() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: OrpheusColors.onyx,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OrpheusColors.slate, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Text(
+                'FLOW',
+                style: GoogleFonts.cinzel(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w400,
+                  color: OrpheusColors.lyreGold,
+                  letterSpacing: 3,
+                ),
+              ),
+              if (_transitionMode == 'observing') ...[
+                const SizedBox(width: 8),
+                Text(
+                  'TRANSITIONING',
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: OrpheusColors.amberGlow,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Combined bars + curve
+          SizedBox(
+            height: 40,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  children: [
+                    // Energy bars
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        for (int i = 0; i < _flowTrajectory.length; i++)
+                          Expanded(
+                            child: _buildFlowBar(
+                              _flowTrajectory[i],
+                              isCurrent: i == 0,
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Curve overlay
+                    if (_flowTrajectory.length > 1)
+                      CustomPaint(
+                        size: Size(constraints.maxWidth, 40),
+                        painter: _FlowCurvePainter(
+                          trajectory: _flowTrajectory,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlowBar(Map<String, dynamic> trackData,
+      {required bool isCurrent}) {
+    final energy = (trackData['energy'] as num?)?.toDouble() ?? 0.5;
+    final adopted = trackData['adopted'] as bool? ?? false;
+
+    final baseColor = adopted ? OrpheusColors.mist : OrpheusColors.lyreGold;
+    final barHeight = 8.0 + (energy * 24.0); // 8–32px
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            width: double.infinity,
+            height: barHeight,
+            decoration: BoxDecoration(
+              color: isCurrent
+                  ? baseColor.withValues(alpha: 0.8)
+                  : baseColor.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(3),
+              border: isCurrent
+                  ? Border.all(
+                      color: OrpheusColors.amberGlow,
+                      width: 1.2,
+                    )
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSteeringSection(Map<String, double> steering) {
+    final syncStatus = ref.watch(steeringSyncProvider);
+
     return Container(
       decoration: BoxDecoration(
         color: OrpheusColors.onyx,
@@ -815,7 +982,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       child: Column(
         children: [
-          // Header with expand/collapse
+          // Header with expand/collapse + sync indicator
           InkWell(
             onTap: () => setState(() {
               _steeringExpanded = !_steeringExpanded;
@@ -827,14 +994,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'STEERING',
-                    style: GoogleFonts.cinzel(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: OrpheusColors.lyreGold,
-                      letterSpacing: 3,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'STEERING',
+                        style: GoogleFonts.cinzel(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: OrpheusColors.lyreGold,
+                          letterSpacing: 3,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildSyncIndicator(syncStatus),
+                    ],
                   ),
                   Icon(
                     _steeringExpanded
@@ -847,6 +1020,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
+
+          // Error message (when expanded and sync failed)
+          if (_steeringExpanded &&
+              syncStatus == SteeringSyncStatus.error)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Steering sync failed \u2014 changes may not be applied',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: OrpheusColors.wineRed,
+                    ),
+              ),
+            ),
 
           // Sliders (when expanded)
           if (_steeringExpanded)
@@ -873,4 +1059,174 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildSyncIndicator(SteeringSyncStatus status) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: switch (status) {
+        SteeringSyncStatus.idle => const SizedBox.shrink(
+            key: ValueKey('idle'),
+          ),
+        SteeringSyncStatus.syncing => const _SyncPulse(
+            key: ValueKey('syncing'),
+          ),
+        SteeringSyncStatus.synced => const Icon(
+            Icons.check,
+            key: ValueKey('synced'),
+            size: 14,
+            color: OrpheusColors.laurelGreen,
+          ),
+        SteeringSyncStatus.error => const Icon(
+            Icons.error_outline,
+            key: ValueKey('error'),
+            size: 14,
+            color: OrpheusColors.wineRed,
+          ),
+      },
+    );
+  }
+}
+
+// ── Pulsing amber dot for "syncing" state ────────────────────────────
+
+class _SyncPulse extends StatefulWidget {
+  const _SyncPulse({super.key});
+
+  @override
+  State<_SyncPulse> createState() => _SyncPulseState();
+}
+
+class _SyncPulseState extends State<_SyncPulse>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: const BoxDecoration(
+          color: OrpheusColors.amberGlow,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Flow curve painter ───────────────────────────────────────────────
+
+class _FlowCurvePainter extends CustomPainter {
+  final List<Map<String, dynamic>> trajectory;
+
+  _FlowCurvePainter({required this.trajectory});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (trajectory.length < 2) return;
+
+    final n = trajectory.length;
+    final slotWidth = size.width / n;
+
+    // Build points: x = center of each bar slot, y = energy mapped to height
+    final points = <Offset>[];
+    for (int i = 0; i < n; i++) {
+      final energy = (trajectory[i]['energy'] as num?)?.toDouble() ?? 0.5;
+      final x = slotWidth * i + slotWidth / 2;
+      final y = size.height - (energy * size.height * 0.85) - 2;
+      points.add(Offset(x, y));
+    }
+
+    // Find the transition index (last adopted track)
+    int transitionIdx = -1;
+    for (int i = 0; i < n; i++) {
+      if (trajectory[i]['adopted'] == true) transitionIdx = i;
+    }
+
+    // Draw curve with gradient: muted for adopted, gold for Orpheus
+    final path = Path()..moveTo(points[0].dx, points[0].dy);
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final midX = (p0.dx + p1.dx) / 2;
+      path.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
+    }
+
+    // Create gradient shader
+    final adoptedColor = const Color(0xFF8A8A99); // mist
+    final orpheusColor = const Color(0xFFD4A843); // lyreGold
+
+    final Paint curvePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    if (transitionIdx >= 0 && transitionIdx < n - 1) {
+      // Gradient transition at the handoff point
+      final transitionX = points[transitionIdx].dx / size.width;
+      curvePaint.shader = LinearGradient(
+        colors: [
+          adoptedColor.withValues(alpha: 0.7),
+          adoptedColor.withValues(alpha: 0.7),
+          orpheusColor.withValues(alpha: 0.8),
+          orpheusColor.withValues(alpha: 0.8),
+        ],
+        stops: [
+          0.0,
+          (transitionX * 0.9).clamp(0.0, 1.0),
+          (transitionX * 1.1).clamp(0.0, 1.0),
+          1.0,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    } else {
+      // All same color (no adopted tracks or all adopted)
+      final allAdopted = trajectory.every((t) => t['adopted'] == true);
+      curvePaint.color = allAdopted
+          ? adoptedColor.withValues(alpha: 0.7)
+          : orpheusColor.withValues(alpha: 0.8);
+    }
+
+    canvas.drawPath(path, curvePaint);
+
+    // Draw dots at each point
+    for (int i = 0; i < points.length; i++) {
+      final adopted = trajectory[i]['adopted'] as bool? ?? false;
+      final dotColor = adopted ? adoptedColor : orpheusColor;
+      final dotPaint = Paint()..color = dotColor.withValues(alpha: i == 0 ? 1.0 : 0.7);
+      canvas.drawCircle(points[i], i == 0 ? 3.5 : 2.5, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FlowCurvePainter oldDelegate) =>
+      oldDelegate.trajectory.length != trajectory.length ||
+      !_listsEqual(oldDelegate.trajectory, trajectory);
+}
+
+bool _listsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i]['energy'] != b[i]['energy'] || a[i]['adopted'] != b[i]['adopted']) {
+      return false;
+    }
+  }
+  return true;
 }

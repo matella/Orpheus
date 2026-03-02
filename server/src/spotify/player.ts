@@ -12,6 +12,10 @@ export async function getPlayerState(): Promise<SpotifyPlayerState | null> {
     const data = await spotifyFetch<any>('/me/player');
     if (!data) return null;
 
+    // Skip podcast episodes — Orpheus only manages music tracks
+    const item = data.item;
+    const isTrack = item && item.type !== 'episode';
+
     return {
       isPlaying: data.is_playing,
       progressMs: data.progress_ms ?? 0,
@@ -24,26 +28,24 @@ export async function getPlayerState(): Promise<SpotifyPlayerState | null> {
             volumePercent: data.device.volume_percent,
           }
         : null,
-      track: data.item
+      track: isTrack
         ? {
-            id: data.item.id,
-            uri: data.item.uri,
-            name: data.item.name,
-            artists: data.item.artists.map((a: any) => ({ id: a.id, name: a.name })),
+            id: item.id,
+            uri: item.uri,
+            name: item.name,
+            artists: (item.artists ?? []).map((a: any) => ({ id: a.id, name: a.name })),
             album: {
-              id: data.item.album.id,
-              name: data.item.album.name,
-              images: data.item.album.images,
+              id: item.album?.id ?? '',
+              name: item.album?.name ?? '',
+              images: item.album?.images ?? [],
             },
-            durationMs: data.item.duration_ms,
+            durationMs: item.duration_ms,
           }
         : null,
       shuffleState: data.shuffle_state,
       repeatState: data.repeat_state,
     };
   } catch (error: any) {
-    // 204 No Content means no active player
-    if (error?.statusCode === 204) return null;
     throw error;
   }
 }
@@ -52,7 +54,8 @@ export async function getPlayerState(): Promise<SpotifyPlayerState | null> {
  * Get available Spotify devices.
  */
 export async function getDevices(): Promise<SpotifyDevice[]> {
-  const data = await spotifyFetch<{ devices: any[] }>('/me/player/devices');
+  const data = await spotifyFetch<{ devices: any[] } | undefined>('/me/player/devices');
+  if (!data?.devices) return [];
   return data.devices.map((d) => ({
     id: d.id,
     name: d.name,

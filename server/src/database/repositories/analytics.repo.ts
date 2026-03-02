@@ -125,6 +125,20 @@ export function getTotalListeningTime(daysBack: number = 30): number {
 }
 
 /**
+ * Get total distinct tracks played over a time window (from interactions, not library count).
+ */
+export function getTotalTracksPlayed(daysBack: number = 30): number {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT COUNT(DISTINCT track_id) as count
+    FROM interactions
+    WHERE interaction_type = 'play'
+      AND created_at >= datetime('now', ?)
+  `).get(`-${daysBack} days`) as { count: number };
+  return row.count;
+}
+
+/**
  * Get discovery rate: ratio of first-time tracks vs repeated.
  */
 export function getDiscoveryRate(daysBack: number = 30): number {

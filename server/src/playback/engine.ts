@@ -1,14 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { logger } from '../shared/logger.js';
-import { PLAYER_POLL_INTERVAL_MS } from '../shared/constants.js';
-import { sleep } from '../shared/utils.js';
-import { getPlayerState } from '../spotify/player.js';
+import { PLAYER_POLL_INTERVAL_MS, QUEUE_COHERENCE_THRESHOLD, QUEUE_ANALYSIS_DEPTH } from '../shared/constants.js';
+import { getPlayerState, getQueue } from '../spotify/player.js';
 import { playTrack, addToQueue, drainQueue, skipToNext } from '../spotify/player.js';
 import { getRandomTracks, getTrackBySpotifyId } from '../database/repositories/track.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
 import { selector } from '../intelligence/selector.js';
 import { stateVectorManager } from '../intelligence/state-vector.js';
 import { learnTimePreferences } from '../intelligence/context-learning.js';
+import { analyzeQueueCoherence } from '../intelligence/coherence.js';
 import { generateSessionName, generateSessionRecap } from '../ai/service.js';
 import { getAiSettings } from '../database/repositories/settings.repo.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
@@ -20,11 +20,19 @@ import type { PlaybackTrack, EngineState } from './types.js';
 /**
  * Events emitted by the playback engine.
  */
+export interface TrajectoryPoint {
+  name: string;
+  energy: number;
+  valence: number;
+  adopted: boolean;
+}
+
 export interface EngineEvents {
   track_changed: { current: PlaybackTrack; next: PlaybackTrack | null };
   session_started: { sessionId: number; deviceName: string | null };
   session_ended: { sessionId: number; trackCount: number };
-  state_updated: { state: EngineState; current: PlaybackTrack | null; next: PlaybackTrack | null };
+  state_updated: { state: EngineState; current: PlaybackTrack | null; next: PlaybackTrack | null; trajectory: TrajectoryPoint[] };
+  transition_complete: { adoptedTracks: number; coherenceScore: number | null };
 }
 
 /**
@@ -52,6 +60,13 @@ class PlaybackEngine extends EventEmitter {
   private nextSyncedToSpotify = false;
   private bufferSyncedToSpotify = false;
   private skipInProgress = false;
+  private transitionMode: 'none' | 'observing' | 'autonomous' = 'none';
+  private adoptedTrackCount = 0;
+  private coherenceScore: number | null = null;
+  /** Consecutive polls where no active Spotify device was found. */
+  private noDeviceCount = 0;
+  /** Number of consecutive no-device polls before stopping the engine. */
+  private static readonly NO_DEVICE_TOLERANCE = 3;
 
   /**
    * Start the engine for a given device.
@@ -67,6 +82,7 @@ class PlaybackEngine extends EventEmitter {
     this.deviceName = deviceName ?? null;
     this.status = 'running';
     this.trackCount = 0;
+    this.noDeviceCount = 0;
     this.startedAt = new Date().toISOString();
 
     // Infer context before starting session
@@ -82,11 +98,12 @@ class PlaybackEngine extends EventEmitter {
     });
 
     this.emit('session_started', { sessionId, deviceName: this.deviceName });
-    selector.initSession(sessionId);
+    // Skip default state vector init — gracefulStartup() seeds it from actual tracks
+    selector.initSession(sessionId, true);
     logger.info({ deviceId, deviceName, initialContext }, 'Playback engine started');
 
-    // Select and play the first track
-    await this.selectAndPlayInitial();
+    // Attempt graceful startup (respects current playback)
+    await this.gracefulStartup();
 
     // Start the polling loop
     this.runLoop();
@@ -105,24 +122,42 @@ class PlaybackEngine extends EventEmitter {
     }
 
     const sessionId = this.session.getSessionId();
-    if (sessionId) {
+    const hasContent = this.trackCount > 0;
+
+    // Record final track's listen duration before ending session
+    const finalTrack = this.queue.getCurrent();
+    if (finalTrack && this.trackStartTime) {
+      const listenDuration = Date.now() - this.trackStartTime;
+      recordInteraction({
+        trackId: finalTrack.id,
+        sessionId: sessionId ?? undefined,
+        interactionType: 'play',
+        listenDurationMs: listenDuration,
+        completionRatio: finalTrack.durationMs > 0
+          ? Math.min(1, listenDuration / finalTrack.durationMs)
+          : 0,
+      });
+      this.session.recordTrack(listenDuration);
+    }
+
+    if (sessionId && hasContent) {
       // Learn time-of-day preferences from this session's state trajectory
       learnTimePreferences(sessionId);
       selector.endSession(sessionId);
     }
-    this.session.end({ trackCount: this.trackCount });
 
-    // Fire-and-forget AI session name + recap generation
-    if (sessionId) {
+    // End (or delete if empty) the session
+    const sessionKept = this.session.end({ trackCount: this.trackCount });
+
+    // Fire-and-forget AI session name + recap only for non-empty sessions
+    if (sessionId && sessionKept) {
       Promise.all([
         generateSessionName(sessionId),
         generateSessionRecap(sessionId),
-      ]).catch(() => {
-        // Silently ignore — AI features are best-effort
+      ]).catch((err) => {
+        logger.debug({ err }, 'AI session recap/name generation failed (best-effort)');
       });
-    }
 
-    if (sessionId) {
       this.emit('session_ended', { sessionId, trackCount: this.trackCount });
     }
 
@@ -137,6 +172,10 @@ class PlaybackEngine extends EventEmitter {
     this.startedAt = null;
     this.trackStartTime = null;
     this.lastProgressMs = 0;
+    this.transitionMode = 'none';
+    this.adoptedTrackCount = 0;
+    this.coherenceScore = null;
+    this.noDeviceCount = 0;
     this.status = 'idle';
 
     logger.info('Playback engine stopped');
@@ -172,9 +211,15 @@ class PlaybackEngine extends EventEmitter {
 
   /**
    * Skip the current track.
+   * Guarded by skipInProgress to prevent double-tap races where two concurrent
+   * skip() calls both advance the queue before either completes.
    */
   async skip(): Promise<void> {
     if (this.status !== 'running') return;
+    if (this.skipInProgress) {
+      logger.debug('skip() called while another skip is in progress -- ignoring');
+      return;
+    }
     this.skipInProgress = true;
     logger.info('skip() called');
     this.logQueueState('skip-entry');
@@ -210,17 +255,17 @@ class PlaybackEngine extends EventEmitter {
 
     if (next) {
       if (this.nextSyncedToSpotify) {
-        // Track is already at the front of Spotify's user queue — use skipToNext()
+        // Track is already at the front of Spotify's user queue -- use skipToNext()
         // to consume it naturally. This avoids leaving a stale duplicate.
-        logger.info({ strategy: 'skipToNext', track: next.name }, 'Skip strategy: synced — using skipToNext()');
+        logger.info({ strategy: 'skipToNext', track: next.name }, 'Skip strategy: synced -- using skipToNext()');
         await skipToNext();
         // Shift sync flags: buffer (if synced) is now the front of Spotify's queue
         this.nextSyncedToSpotify = this.bufferSyncedToSpotify;
         this.bufferSyncedToSpotify = false;
       } else {
-        // Track was never synced to Spotify — must force-play it.
+        // Track was never synced to Spotify -- must force-play it.
         // Drain first to clear any stale entries.
-        logger.info({ strategy: 'drainAndPlay', track: next.name }, 'Skip strategy: unsynced — draining queue and force-playing');
+        logger.info({ strategy: 'drainAndPlay', track: next.name }, 'Skip strategy: unsynced -- draining queue and force-playing');
         await drainQueue();
         await playTrack(next.uri, this.deviceId ?? undefined);
         this.nextSyncedToSpotify = false;
@@ -228,6 +273,7 @@ class PlaybackEngine extends EventEmitter {
       }
       this.currentTrackSpotifyId = next.spotifyId;
       this.trackStartTime = Date.now();
+      this.lastProgressMs = 0; // Reset so the poll loop doesn't falsely detect a same-track restart
       this.trackCount++;
       this.session.recordTrack(0);
 
@@ -244,6 +290,10 @@ class PlaybackEngine extends EventEmitter {
 
     // Fill the queue
     await this.fillQueue();
+
+    // Check if skipping through adopted tracks completed the transition
+    await this.checkTransition();
+
     this.logQueueState('skip-exit');
     logger.info('skip() complete');
 
@@ -264,6 +314,9 @@ class PlaybackEngine extends EventEmitter {
       currentTrackSpotifyId: this.currentTrackSpotifyId,
       trackCount: this.trackCount,
       startedAt: this.startedAt,
+      transitionMode: this.transitionMode,
+      adoptedTrackCount: this.adoptedTrackCount,
+      coherenceScore: this.coherenceScore,
     };
   }
 
@@ -278,6 +331,34 @@ class PlaybackEngine extends EventEmitter {
     return this.queue.peekNext();
   }
 
+  /**
+   * Build the trajectory for the flow indicator (current + lookahead).
+   */
+  getTrajectory(): TrajectoryPoint[] {
+    const trajectory: TrajectoryPoint[] = [];
+    const current = this.queue.getCurrent();
+    if (current) {
+      trajectory.push({
+        name: current.name,
+        energy: current.energy ?? 0.5,
+        valence: current.valence ?? 0.5,
+        adopted: current.adopted ?? false,
+      });
+    }
+    for (let i = 0; i < this.queue.getLookaheadSize(); i++) {
+      const t = this.queue.peekAt(i);
+      if (t) {
+        trajectory.push({
+          name: t.name,
+          energy: t.energy ?? 0.5,
+          valence: t.valence ?? 0.5,
+          adopted: t.adopted ?? false,
+        });
+      }
+    }
+    return trajectory;
+  }
+
   isRunning(): boolean {
     return this.status === 'running';
   }
@@ -285,11 +366,28 @@ class PlaybackEngine extends EventEmitter {
   /**
    * Inject tracks into the playback queue from a user request.
    * Does NOT interrupt the currently playing track.
-   * The first track becomes "next", the rest are buffered for sequential play.
+   *
+   * During observing mode (adopted tracks playing), injected tracks are
+   * queued to play AFTER all adopted tracks to avoid disrupting the
+   * smooth handoff. In autonomous mode, the first track becomes "next".
    */
   async injectTracks(tracks: PlaybackTrack[]): Promise<{ injected: number }> {
     if (this.status !== 'running' || tracks.length === 0) {
       return { injected: 0 };
+    }
+
+    // During observing mode, don't displace adopted tracks — buffer all
+    // injected tracks to play after the adopted queue drains
+    if (this.transitionMode === 'observing') {
+      for (const track of tracks) {
+        this.injectedQueue.push(track);
+      }
+      logger.info(
+        { count: tracks.length, firstTrack: tracks[0].name },
+        'Buffered injected tracks for after transition (observing mode)',
+      );
+      this.emitState();
+      return { injected: tracks.length };
     }
 
     const first = tracks[0];
@@ -299,7 +397,7 @@ class PlaybackEngine extends EventEmitter {
       this.nextSyncedToSpotify = true;
       logger.info({ track: first.name, artist: first.artist }, 'Injected track as next');
     } catch (err) {
-      // API failed — still set the track in queue but mark as unsynced
+      // API failed -- still set the track in queue but mark as unsynced
       // so fillQueue will retry the Spotify sync on next poll
       logger.warn({ err, track: first.name }, 'Failed to add injected track to Spotify queue');
       this.queue.setNext(first);
@@ -313,10 +411,13 @@ class PlaybackEngine extends EventEmitter {
     // bufferSyncedToSpotify needs reset since lookahead shifted
     this.bufferSyncedToSpotify = false;
 
-    this.emit('track_changed', {
-      current: this.queue.getCurrent()!,
-      next: this.queue.peekNext(),
-    });
+    const currentAfterInject = this.queue.getCurrent();
+    if (currentAfterInject) {
+      this.emit('track_changed', {
+        current: currentAfterInject,
+        next: this.queue.peekNext(),
+      });
+    }
     this.emitState();
 
     return { injected: tracks.length };
@@ -324,7 +425,172 @@ class PlaybackEngine extends EventEmitter {
 
   // --- Internal ---
 
+  /**
+   * Graceful startup: respect whatever is currently playing on Spotify.
+   * 1. If nothing is playing → fall back to selectAndPlayInitial()
+   * 2. If something is playing → analyze the queue for coherence
+   *    - Coherent queue: adopt those tracks, seed state from them
+   *    - Incoherent queue: use only current track, drain later
+   * Never interrupts the current song.
+   */
+  private async gracefulStartup(): Promise<void> {
+    const sessionId = this.session.getSessionId()!;
+
+    // 1. Check what Spotify is currently playing
+    let playerState;
+    try {
+      playerState = await getPlayerState();
+    } catch {
+      logger.warn('Could not get player state for graceful startup -- falling back to direct start');
+      await this.selectAndPlayInitial();
+      return;
+    }
+
+    if (!playerState || !playerState.track || !playerState.isPlaying) {
+      // Nothing playing — standard startup (select + play)
+      logger.info('Nothing currently playing -- using standard startup');
+      await this.selectAndPlayInitial();
+      return;
+    }
+
+    // 2. Look up the current track in our library
+    const currentTrackRow = getTrackBySpotifyId(playerState.track.id);
+
+    if (!currentTrackRow) {
+      // Current track isn't in library — observe it, take over when it ends
+      // Init state vector with time-based defaults (no seed track available)
+      stateVectorManager.initSession(sessionId);
+      this.transitionMode = 'observing';
+      this.adoptedTrackCount = 0;
+      this.coherenceScore = null;
+      this.currentTrackSpotifyId = playerState.track.id;
+      this.trackStartTime = Date.now() - playerState.progressMs;
+      this.lastProgressMs = playerState.progressMs;
+      this.trackCount = 0; // Don't count unknown tracks
+      logger.info(
+        { spotifyId: playerState.track.id, trackName: playerState.track.name },
+        'Current track not in library -- observing until it ends',
+      );
+      this.emitState();
+      return;
+    }
+
+    // 3. Get Spotify's queue and resolve tracks from our DB.
+    // We resolve in order and STOP at the first gap (unresolved or missing track)
+    // so our adopted tracks match Spotify's actual playback order.
+    // A lookup map avoids re-querying the DB in the adoption loop.
+    const resolvedQueue: import('../database/types.js').TrackRow[] = [];
+    const resolvedBySpotifyId = new Map<string, import('../database/types.js').TrackRow>();
+    let spotifyQueueSlice: any[] = [];
+    try {
+      const { queue: spotifyQueue } = await getQueue();
+      spotifyQueueSlice = spotifyQueue.slice(0, QUEUE_ANALYSIS_DEPTH);
+      for (const item of spotifyQueueSlice) {
+        if (!item?.id) break; // Unknown item — stop (gap in queue)
+        const row = getTrackBySpotifyId(item.id);
+        if (!row) break; // Not in our library — stop (gap)
+        resolvedQueue.push(row);
+        resolvedBySpotifyId.set(item.id, row);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Could not fetch Spotify queue -- proceeding with current track only');
+    }
+
+    // 4. Analyze coherence (on contiguous resolved tracks only)
+    const coherence = analyzeQueueCoherence(currentTrackRow, resolvedQueue);
+    this.coherenceScore = coherence.score;
+
+    // 5. Determine the contiguous run of adoptable tracks from the FRONT
+    // of Spotify's queue. Stop at the first incoherent track so our
+    // lookahead order matches Spotify's actual playback order.
+    // Uses the pre-resolved lookup map to avoid duplicate DB queries.
+    const contiguousAdoptable: import('../database/types.js').TrackRow[] = [];
+    if (coherence.score >= QUEUE_COHERENCE_THRESHOLD) {
+      const coherentIds = new Set(coherence.coherentTracks.map(t => t.id));
+      for (const item of spotifyQueueSlice) {
+        if (!item?.id) break;
+        const row = resolvedBySpotifyId.get(item.id);
+        if (!row) break; // Not resolved (gap), stop
+        if (!coherentIds.has(row.id)) break; // Incoherent, stop
+        contiguousAdoptable.push(row);
+      }
+    }
+
+    // 6. Set current track in our internal queue (without touching Spotify)
+    const currentPlayback = toPlaybackTrack(currentTrackRow);
+    this.queue.setCurrent(currentPlayback);
+    this.currentTrackSpotifyId = currentTrackRow.spotify_id;
+    this.trackStartTime = Date.now() - playerState.progressMs;
+    this.lastProgressMs = playerState.progressMs;
+    this.trackCount = 1;
+
+    // 7. Seed state and decide on queue handling
+    if (contiguousAdoptable.length > 0) {
+      // COHERENT: adopt contiguous coherent queue tracks
+      const seedTracks = [currentTrackRow, ...contiguousAdoptable];
+      stateVectorManager.seedFromTracks(sessionId, seedTracks);
+
+      for (const track of contiguousAdoptable) {
+        const pt = toPlaybackTrack(track);
+        pt.adopted = true;
+        this.queue.pushLookahead(pt);
+      }
+
+      this.adoptedTrackCount = contiguousAdoptable.length;
+      this.transitionMode = 'observing';
+
+      // These tracks are already in Spotify's queue in order
+      this.nextSyncedToSpotify = true;
+      if (contiguousAdoptable.length > 1) {
+        this.bufferSyncedToSpotify = true;
+      }
+
+      logger.info(
+        {
+          coherenceScore: coherence.score.toFixed(3),
+          adopted: this.adoptedTrackCount,
+          totalCoherent: coherence.coherentTracks.length,
+          tracks: contiguousAdoptable.map(t => t.name),
+        },
+        'Coherent queue detected -- adopting contiguous tracks for smooth handoff',
+      );
+    } else {
+      // INCOHERENT (or empty queue): seed from current track only
+      stateVectorManager.seedFromTracks(sessionId, [currentTrackRow]);
+      this.adoptedTrackCount = 0;
+      this.transitionMode = 'observing';
+
+      // Don't drain now — wait for current track to end
+      logger.info(
+        { coherenceScore: coherence.score.toFixed(3) },
+        'Incoherent or empty queue -- will take full control after current track',
+      );
+    }
+
+    // 8. Record the current track play (use 0 duration — actual listen time
+    //    will be calculated when the track ends in handleTrackChange)
+    this.session.recordTrack(0);
+    recordPlay(currentTrackRow.id);
+    recordInteraction({
+      trackId: currentTrackRow.id,
+      sessionId,
+      interactionType: 'play',
+    });
+    selector.onTrackPlayed(sessionId, currentTrackRow);
+
+    // 9. Emit initial state
+    this.emit('track_changed', {
+      current: currentPlayback,
+      next: this.queue.peekNext(),
+    });
+    this.emitState();
+  }
+
   private async selectAndPlayInitial(): Promise<void> {
+    // State vector wasn't seeded by gracefulStartup — init with time-based defaults
+    const sessionId = this.session.getSessionId()!;
+    stateVectorManager.initSession(sessionId);
+
     const track = this.selectNextTrack();
     if (!track) {
       logger.error('No tracks available in library. Cannot start playback.');
@@ -342,7 +608,7 @@ class PlaybackEngine extends EventEmitter {
 
     try {
       await playTrack(track.uri, this.deviceId ?? undefined);
-      // Fresh start — ensure sync flags are reset before fillQueue
+      // Fresh start -- ensure sync flags are reset before fillQueue
       this.nextSyncedToSpotify = false;
       this.bufferSyncedToSpotify = false;
     } catch (err) {
@@ -355,17 +621,14 @@ class PlaybackEngine extends EventEmitter {
     recordPlay(track.id);
     recordInteraction({
       trackId: track.id,
-      sessionId: this.session.getSessionId() ?? undefined,
+      sessionId,
       interactionType: 'play',
     });
 
     // Notify intelligence of first track
-    const sessionId = this.session.getSessionId();
-    if (sessionId) {
-      const trackRow = getTrackBySpotifyId(track.spotifyId);
-      if (trackRow) {
-        selector.onTrackPlayed(sessionId, trackRow);
-      }
+    const trackRow = getTrackBySpotifyId(track.spotifyId);
+    if (trackRow) {
+      selector.onTrackPlayed(sessionId, trackRow);
     }
 
     // Fill the rest of the queue
@@ -399,7 +662,7 @@ class PlaybackEngine extends EventEmitter {
     }
 
     // Sync the first two lookahead positions to Spotify's queue.
-    // Only these are committed — deeper positions remain internal
+    // Only these are committed -- deeper positions remain internal
     // pre-selections that the AI can re-evaluate.
     const next = this.queue.peekNext();
     if (next && !this.nextSyncedToSpotify) {
@@ -433,7 +696,7 @@ class PlaybackEngine extends EventEmitter {
     if (sessionId) {
       const selected = selector.selectNextTrack(sessionId, excludeIds);
       if (selected) return toPlaybackTrack(selected);
-      logger.warn('Intelligence selector returned no candidates — falling back to random');
+      logger.warn('Intelligence selector returned no candidates -- falling back to random');
     }
     // Fallback: random track from the library
     const rows = getRandomTracks(1, excludeIds);
@@ -464,12 +727,25 @@ class PlaybackEngine extends EventEmitter {
 
     const playerState = await getPlayerState();
 
-    // No active player — stop the engine
+    // No active player -- tolerate transient absence before stopping
     if (!playerState || !playerState.device) {
-      logger.info('No active player detected, stopping engine');
-      this.stop();
+      this.noDeviceCount++;
+      if (this.noDeviceCount >= PlaybackEngine.NO_DEVICE_TOLERANCE) {
+        logger.info(
+          { consecutiveMisses: this.noDeviceCount },
+          'No active player after multiple polls, stopping engine',
+        );
+        this.stop();
+      } else {
+        logger.debug(
+          { consecutiveMisses: this.noDeviceCount, tolerance: PlaybackEngine.NO_DEVICE_TOLERANCE },
+          'No active player -- waiting for device to reappear',
+        );
+      }
       return;
     }
+    // Device is active — reset failure counter
+    this.noDeviceCount = 0;
 
     const progressMs = playerState.progressMs;
 
@@ -489,7 +765,7 @@ class PlaybackEngine extends EventEmitter {
       if (next) {
         logger.info(
           { replayedTrack: playerState.track.name, forcingNext: next.name },
-          'Same-track restart detected — force-playing next queued track',
+          'Same-track restart detected -- force-playing next queued track',
         );
         // Record completion of the replayed track
         const current = this.queue.getCurrent();
@@ -516,6 +792,11 @@ class PlaybackEngine extends EventEmitter {
         this.trackCount++;
 
         recordPlay(next.id);
+        recordInteraction({
+          trackId: next.id,
+          sessionId: this.session.getSessionId() ?? undefined,
+          interactionType: 'play',
+        });
 
         const sessionId = this.session.getSessionId();
         if (sessionId) {
@@ -525,10 +806,11 @@ class PlaybackEngine extends EventEmitter {
 
         this.emit('track_changed', { current: next, next: this.queue.peekNext() });
         this.emitState();
+        await this.checkTransition();
         await this.fillQueue();
       } else {
-        // No next track — select one, then force-play it
-        logger.info('Same-track restart detected but no next track — selecting new track');
+        // No next track -- select one, then force-play it
+        logger.info('Same-track restart detected but no next track -- selecting new track');
         const currentForExclude = this.queue.getCurrent();
         const restartExcludeIds = new Set<number>();
         if (currentForExclude) restartExcludeIds.add(currentForExclude.id);
@@ -557,6 +839,11 @@ class PlaybackEngine extends EventEmitter {
           this.trackCount++;
 
           recordPlay(newTrack.id);
+          recordInteraction({
+            trackId: newTrack.id,
+            sessionId: this.session.getSessionId() ?? undefined,
+            interactionType: 'play',
+          });
 
           const sessionId = this.session.getSessionId();
           if (sessionId) {
@@ -566,6 +853,7 @@ class PlaybackEngine extends EventEmitter {
 
           this.emit('track_changed', { current: newTrack, next: this.queue.peekNext() });
           this.emitState();
+          await this.checkTransition();
           await this.fillQueue();
         }
       }
@@ -573,7 +861,7 @@ class PlaybackEngine extends EventEmitter {
 
     this.lastProgressMs = progressMs;
 
-    // Always keep the queue topped up — ensures next + buffer are filled
+    // Always keep the queue topped up -- ensures next + buffer are filled
     // so the AI always has at least 2 tracks ready for recalibration.
     await this.fillQueue();
   }
@@ -597,7 +885,7 @@ class PlaybackEngine extends EventEmitter {
         : 0;
 
       // Record completion (natural end or external skip)
-      const wasSkipped = completionRatio < 0.8;
+      const wasSkipped = completionRatio < 0.95;
       recordInteraction({
         trackId: previous.id,
         sessionId: this.session.getSessionId() ?? undefined,
@@ -623,25 +911,25 @@ class PlaybackEngine extends EventEmitter {
     // Check if the new track is our expected next track
     const expectedNext = this.queue.peekNext();
     if (expectedNext && expectedNext.spotifyId === newSpotifyId) {
-      // Natural transition to our queued track — perfect
+      // Natural transition to our queued track -- perfect
       logger.info({ track: expectedNext.name }, 'Natural transition to queued track');
       this.queue.advance();
-      // Buffer was promoted to next — carry its sync state
+      // Buffer was promoted to next -- carry its sync state
       this.nextSyncedToSpotify = this.bufferSyncedToSpotify;
       this.bufferSyncedToSpotify = false;
-    } else if (expectedNext && completionRatio >= 0.8) {
+    } else if (expectedNext && completionRatio >= 0.95) {
       // Track ended naturally but Spotify played its autoplay instead of our queue.
       // Force-play the intended track to maintain Orpheus control.
       logger.info(
         { intended: expectedNext.name, spotifyPlayed: newSpotifyId },
-        'Queue mismatch on natural transition — force-playing intended track',
+        'Queue mismatch on natural transition -- force-playing intended track',
       );
       this.queue.advance();
       try {
         // Drain stale queue entries before force-playing to prevent duplicates
         await drainQueue();
         await playTrack(expectedNext.uri, this.deviceId ?? undefined);
-        // Reset sync flags — queue was drained and playTrack started fresh
+        // Reset sync flags -- queue was drained and playTrack started fresh
         this.nextSyncedToSpotify = false;
         this.bufferSyncedToSpotify = false;
         this.currentTrackSpotifyId = expectedNext.spotifyId;
@@ -657,16 +945,18 @@ class PlaybackEngine extends EventEmitter {
           if (trackRow) selector.onTrackPlayed(sessionId, trackRow);
         }
 
+        // Check transition before filling (same order as normal path)
+        await this.checkTransition();
         await this.fillQueue();
         this.emit('track_changed', { current: expectedNext, next: this.queue.peekNext() });
         this.emitState();
-        return; // Done — skip normal post-change handling
+        return; // Done -- skip normal post-change handling
       } catch (err) {
         logger.warn({ err }, 'Failed to force-play intended track, accepting Spotify autoplay');
         // Fall through to accept whatever Spotify is playing
       }
     } else {
-      // User manually changed the track on Spotify — accept it
+      // User manually changed the track on Spotify -- accept it
       logger.info(
         { newSpotifyId, expectedNext: expectedNext?.name ?? null, completionRatio: completionRatio.toFixed(2) },
         'External track change detected',
@@ -675,9 +965,33 @@ class PlaybackEngine extends EventEmitter {
       if (externalRow) {
         this.queue.setCurrent(toPlaybackTrack(externalRow));
       } else {
-        // Track not in our DB — clear current so we don't show stale info
-        logger.info({ newSpotifyId }, 'Track not in DB — clearing queue');
+        // Track not in our DB -- clear current so we don't show stale info
+        logger.info({ newSpotifyId }, 'Track not in DB -- clearing queue');
         this.queue.clear();
+      }
+
+      // External change during observing mode: skip remaining adopted tracks
+      // and go straight to autonomous
+      if (this.transitionMode === 'observing') {
+        this.transitionMode = 'autonomous';
+        this.nextSyncedToSpotify = false;
+        this.bufferSyncedToSpotify = false;
+        logger.info('External track change during observing -- jumping to autonomous mode');
+
+        // Drain incoherent queue items so Orpheus takes full control
+        if (this.coherenceScore !== null && this.coherenceScore < QUEUE_COHERENCE_THRESHOLD) {
+          try {
+            await drainQueue();
+            logger.info('Drained incoherent Spotify queue during transition');
+          } catch (err) {
+            logger.warn({ err }, 'Failed to drain incoherent queue during transition');
+          }
+        }
+
+        this.emit('transition_complete', {
+          adoptedTracks: this.adoptedTrackCount,
+          coherenceScore: this.coherenceScore,
+        });
       }
     }
 
@@ -700,21 +1014,61 @@ class PlaybackEngine extends EventEmitter {
       }
     }
 
+    // --- Transition logic (before fillQueue so drain doesn't conflict) ---
+    await this.checkTransition();
+
     // Fill queue with new tracks
     await this.fillQueue();
 
     if (current) {
       this.emit('track_changed', { current, next: this.queue.peekNext() });
     }
+
     this.logQueueState('handleTrackChange-exit');
     this.emitState();
   }
 
+  /**
+   * Check if the observing→autonomous transition should happen.
+   * Called after every track change / skip to detect when all adopted tracks
+   * have been consumed and Orpheus should take full control.
+   *
+   * Note: Queue draining for incoherent queues is handled in the external-change
+   * handler inside handleTrackChange(), not here, to avoid conflicting with
+   * fillQueue() calls.
+   */
+  private async checkTransition(): Promise<void> {
+    if (this.transitionMode !== 'observing') return;
+
+    // Count remaining adopted tracks in the queue
+    let remainingAdopted = 0;
+    for (let i = 0; i < this.queue.getLookaheadSize(); i++) {
+      const t = this.queue.peekAt(i);
+      if (t?.adopted) remainingAdopted++;
+    }
+
+    if (remainingAdopted > 0) return;
+
+    // All adopted tracks consumed — take full control
+    this.transitionMode = 'autonomous';
+    logger.info(
+      { adoptedTracks: this.adoptedTrackCount, coherenceScore: this.coherenceScore?.toFixed(3) },
+      'Transition complete -- Orpheus now in full autonomous control',
+    );
+
+    this.emit('transition_complete', {
+      adoptedTracks: this.adoptedTrackCount,
+      coherenceScore: this.coherenceScore,
+    });
+  }
+
   private emitState(): void {
+    const current = this.queue.getCurrent();
     this.emit('state_updated', {
       state: this.getState(),
-      current: this.queue.getCurrent(),
+      current,
       next: this.queue.peekNext(),
+      trajectory: this.getTrajectory(),
     });
   }
 }

@@ -14,13 +14,59 @@ const Map<String, double> _defaultSteering = {
   'focusVsParty': 0.5,
 };
 
+// ── Sync Status ──────────────────────────────────────────────────────
+
+/// Sync lifecycle for steering controls.
+enum SteeringSyncStatus { idle, syncing, synced, error }
+
+/// Tracks whether the latest steering change has been confirmed by the server.
+class SteeringSyncNotifier extends Notifier<SteeringSyncStatus> {
+  Timer? _resetTimer;
+
+  @override
+  SteeringSyncStatus build() {
+    ref.onDispose(() => _resetTimer?.cancel());
+    return SteeringSyncStatus.idle;
+  }
+
+  void setSyncing() {
+    _resetTimer?.cancel();
+    state = SteeringSyncStatus.syncing;
+  }
+
+  void setSynced() {
+    state = SteeringSyncStatus.synced;
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(milliseconds: 1500), () {
+      state = SteeringSyncStatus.idle;
+    });
+  }
+
+  void setError() {
+    state = SteeringSyncStatus.error;
+    // Persists until the next sync attempt clears it via setSyncing()
+  }
+}
+
+/// Global sync-status provider for the steering controls.
+final steeringSyncProvider =
+    NotifierProvider<SteeringSyncNotifier, SteeringSyncStatus>(
+  SteeringSyncNotifier.new,
+);
+
+// ── Steering Controls ────────────────────────────────────────────────
+
 /// Manages steering control state with debounced API updates.
 class SteeringNotifier extends Notifier<Map<String, double>> {
   Timer? _debounceTimer;
+  Timer? _wsConfirmTimer;
 
   @override
   Map<String, double> build() {
-    ref.onDispose(() => _debounceTimer?.cancel());
+    ref.onDispose(() {
+      _debounceTimer?.cancel();
+      _wsConfirmTimer?.cancel();
+    });
     return {..._defaultSteering};
   }
 
@@ -53,12 +99,23 @@ class SteeringNotifier extends Notifier<Map<String, double>> {
     });
   }
 
-  /// Send current state to the server.
+  /// Send current state to the server with sync-status feedback.
   Future<void> _sendToServer() async {
+    _wsConfirmTimer?.cancel();
+    ref.read(steeringSyncProvider.notifier).setSyncing();
     try {
       await apiService.updateSteeringControls(state);
+      // HTTP succeeded — start fallback timer in case WebSocket is down.
+      // If the WebSocket delivers `steering_updated` first, setSynced()
+      // is called from the WS handler and this timer becomes a no-op.
+      _wsConfirmTimer = Timer(const Duration(seconds: 2), () {
+        final current = ref.read(steeringSyncProvider);
+        if (current == SteeringSyncStatus.syncing) {
+          ref.read(steeringSyncProvider.notifier).setSynced();
+        }
+      });
     } catch (_) {
-      // Silently fail — user sees local state immediately
+      ref.read(steeringSyncProvider.notifier).setError();
     }
   }
 }
