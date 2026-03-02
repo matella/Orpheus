@@ -84,11 +84,13 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 
 ### Intelligence Pipeline
 - **State Vector:** 8-dimensional representation of current listening context (energy, valence, tempo, genre, familiarity, vocalness, aggressiveness, fatigue)
-- **EMA Blending:** New observations blend into the state via exponential moving average (alpha = 0.3)
+- **EMA Blending:** New observations blend into the state via exponential moving average (alpha = 0.2). Null audio features are skipped to prevent state drift.
 - **Steering Controls:** User-adjustable sliders that bias the candidate scoring (energy, mood, familiarity, vocal preference, aggressiveness, genre openness, focus/party)
 - **Candidate Pool:** Genre-filtered, energy-windowed subset of cached tracks with recency penalties
 - **Scorer:** Multi-dimensional distance with configurable weights per attribute
-- **Weighted Random:** Top candidates selected probabilistically by inverse distance (avoids always picking the same "best" track)
+- **Coherence Analysis:** Evaluates queue coherence against the intelligence pipeline state for graceful startup decisions
+- **Natural Language Requests:** Process requests like "play something energetic" via LLM-guided library search
+- **Weighted Random:** Top 3 candidates selected probabilistically by inverse distance (avoids always picking the same "best" track)
 
 ### Feedback & Learning
 - Like/dislike buttons with immediate preference score adjustment
@@ -96,6 +98,12 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - Completion tracking with preference reinforcement
 - Time-of-day preference learning (incremental averaging across sessions)
 - Per-track familiarity scoring that evolves with play count
+
+### Graceful Startup
+- Engine detects current Spotify playback on start — never interrupts what's already playing
+- Analyzes the existing Spotify queue for coherence against the intelligence pipeline
+- Adopts coherent tracks seamlessly, seeding state from the adopted queue
+- Takes over after the current track if the queue is incoherent
 
 ### Automation
 - Auto-start: configurable delay before engine begins playback
@@ -115,6 +123,7 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - Listening hours heatmap (24-hour bar chart)
 - Top tracks by play count
 - Daily sparklines for quick trend visualization
+- Comprehensive listening stats combining Orpheus and Spotify data
 
 ### AI Integration (Optional)
 - Powered by Ollama running locally (default model: llama3.2)
@@ -147,6 +156,9 @@ All routes are prefixed with `/api`.
 | Playback | `/playback/skip` | POST | Skip current track |
 | Playback | `/playback/pause` | POST | Pause playback |
 | Playback | `/playback/resume` | POST | Resume playback |
+| Playback | `/playback/previous` | POST | Play previous track |
+| Playback | `/playback/devices` | GET | Available Spotify devices |
+| Playback | `/playback/request` | POST | Natural language music request |
 | Steering | `/steering` | GET | Current steering values |
 | Steering | `/steering` | PUT | Update steering controls |
 | Feedback | `/feedback/like` | POST | Like current track |
@@ -160,6 +172,7 @@ All routes are prefixed with `/api`.
 | Analytics | `/analytics/hours` | GET | Listening hours heatmap |
 | Analytics | `/analytics/top-tracks` | GET | Top tracks by plays |
 | Analytics | `/analytics/daily` | GET | Daily listening totals |
+| Analytics | `/analytics/listening-stats` | GET | Combined listening statistics |
 | Settings | `/settings` | GET | All settings |
 | Settings | `/settings` | PUT | Update settings |
 | Context | `/context/state` | GET | Current intelligence state |
@@ -189,11 +202,11 @@ Music/
         websocket.ts          # WebSocket broadcast infrastructure
       database/
         connection.ts         # SQLite connection (node:sqlite)
-        migrations.ts         # Schema v1-v3
+        migrations.ts         # Schema v1-v4
         repositories/         # track, interaction, session, preference,
                               # state-history, analytics, settings,
                               # time-preferences, ai-suggestion,
-                              # monthly-recap
+                              # monthly-recap, listening-stats, top-artists
         types.ts              # Row type interfaces
       intelligence/
         state-vector.ts       # 8D state with EMA blending
@@ -203,6 +216,8 @@ Music/
         selector.ts           # Pipeline coordinator
         feedback.ts           # Like/dislike/skip processing
         context-learning.ts   # Time-of-day preference learning
+        coherence.ts          # Queue coherence analysis
+        request-handler.ts    # Natural language request processing
         types.ts              # Intelligence type definitions
       playback/
         engine.ts             # Session lifecycle, track advancement
@@ -269,11 +284,12 @@ Music/
 
 ## Database Schema
 
-SQLite with 3 migration versions:
+SQLite with 4 migration versions:
 
 - **v1:** Core tables — `tracks`, `interactions`, `sessions`, `preferences`, `state_history`, `steering_history`, `time_preferences`, `analytics_cache`, `settings`, `auth_tokens`
 - **v2:** AI support — `ai_suggestions` table, AI-related settings
 - **v3:** Reasoning layer — `session_name` column on sessions, `monthly_recaps` table
+- **v4:** Spotify top artists — `spotify_top_artists` table, listening stats cache support
 
 ---
 
@@ -295,6 +311,39 @@ SQLite with 3 migration versions:
 | HTTP Client | Dio |
 | Charts | fl_chart |
 | Routing | go_router |
+| Containerization | Docker + Docker Compose |
+
+---
+
+## Docker
+
+Run the full stack with Docker Compose:
+
+```bash
+# Server + Client (no AI)
+docker compose up --build
+
+# Server + Client + Ollama AI
+docker compose --profile ai up --build
+```
+
+If using the `ai` profile, pull a model after Ollama starts:
+
+```bash
+docker exec orpheus-ollama ollama pull llama3.2
+```
+
+The client is served on **port 80** (nginx), the server API on **port 3000**, and Ollama on **port 11434**.
+
+| Service | Container | Port | Notes |
+|---------|-----------|------|-------|
+| Server | `orpheus-server` | 3000 | Node.js API + WebSocket |
+| Client | `orpheus-client` | 80 | Flutter web via nginx (proxies `/api` and `/ws` to server) |
+| Ollama | `orpheus-ollama` | 11434 | Optional — enable with `--profile ai` |
+
+The SQLite database is persisted in the `server-data` Docker volume. Ollama models are persisted in `ollama-data`.
+
+> **Note:** You still need a `server/.env` file with your Spotify credentials before building. See [Setup Guide](SETUP.md).
 
 ---
 

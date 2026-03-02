@@ -1,0 +1,48 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: orpheus-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./server/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DB_PATH: ./data/orpheus.db
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - server-data:/app/data
+    depends_on:
+      ollama:
+        condition: service_started
+        required: false
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: orpheus-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: orpheus-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    profiles:
+      - ai
+
+volumes:
+  server-data:
+  ollama-data:

@@ -223,7 +223,8 @@ Smaller models (like `llama3.2` at ~2GB) are recommended for fast response times
 
 ### How the engine works
 
-- When started, Orpheus creates a new session and begins selecting tracks
+- If Spotify is already playing when you start the engine, Orpheus analyzes the current queue and seamlessly adopts it if the tracks are coherent with your listening profile
+- Otherwise, Orpheus creates a new session and begins selecting tracks
 - It polls Spotify every few seconds to detect skips, completions, and pauses
 - Each track completion or skip updates your preference scores and shifts the state vector
 - When you stop the engine, the session ends and (if AI is enabled) a session name and recap are generated
@@ -306,4 +307,54 @@ cd client
 flutter build web       # Web
 flutter build windows   # Windows
 flutter build apk       # Android
+```
+
+---
+
+## Docker Deployment
+
+You can run the full Orpheus stack with Docker Compose instead of installing Node.js and Flutter locally.
+
+### Prerequisites
+
+- **Docker** 24+ and **Docker Compose** v2
+- A `server/.env` file with your Spotify credentials (see step 2 above)
+
+### Quick start
+
+```bash
+# Server + Client only
+docker compose up --build
+
+# Server + Client + Ollama AI
+docker compose --profile ai up --build
+```
+
+### Pull the AI model (if using Ollama)
+
+```bash
+docker exec orpheus-ollama ollama pull llama3.2
+```
+
+### Access
+
+| Service | URL |
+|---------|-----|
+| Client (Flutter web) | http://localhost |
+| Server API | http://localhost:3000/api |
+| Ollama | http://localhost:11434 |
+
+The client's nginx server reverse-proxies `/api` and `/ws` requests to the server container, so everything works from a single origin.
+
+### Data persistence
+
+- **SQLite database:** stored in the `server-data` Docker volume
+- **Ollama models:** stored in the `ollama-data` Docker volume
+
+To reset the database:
+
+```bash
+docker compose down
+docker volume rm music_server-data
+docker compose up --build
 ```

@@ -1,8 +1,14 @@
-/// API base URL — change this to your server's address
-const String apiBaseUrl = 'http://127.0.0.1:3000/api';
+/// API base URL — override at build time with --dart-define=API_BASE_URL=...
+const String apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://127.0.0.1:3000/api',
+);
 
-/// WebSocket URL
-const String wsBaseUrl = 'ws://127.0.0.1:3000/ws';
+/// WebSocket URL — override at build time with --dart-define=WS_BASE_URL=...
+const String wsBaseUrl = String.fromEnvironment(
+  'WS_BASE_URL',
+  defaultValue: 'ws://127.0.0.1:3000/ws',
+);
 
 /// Steering slider debounce duration
 const Duration steeringDebounce = Duration(milliseconds: 300);

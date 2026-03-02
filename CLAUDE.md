@@ -30,6 +30,12 @@ ollama serve         # Start local LLM server (port 11434)
 ollama pull llama3.2 # Pull default model
 ```
 
+### Docker
+```bash
+docker compose up --build                  # Server + Client
+docker compose --profile ai up --build     # Server + Client + Ollama
+```
+
 ## Architecture
 
 **Orpheus** is an autonomous music system: Node.js server controls Spotify playback, a Flutter client provides the UI, and an optional Ollama LLM adds reasoning.
@@ -40,18 +46,20 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
 
 **Layered architecture:**
 - **API** (`api/`) — Fastify routes grouped by domain (auth, playback, steering, sessions, analytics, feedback, context, ai, settings). WebSocket for real-time push.
-- **Playback Engine** (`playback/engine.ts`) — Core loop polling Spotify every 5s. Extends EventEmitter (`track_changed`, `session_started`, `session_ended`, `state_updated`). Manages session lifecycle.
+- **Playback Engine** (`playback/engine.ts`) — Core loop polling Spotify every 5s. Extends EventEmitter (`track_changed`, `session_started`, `session_ended`, `state_updated`, `transition_complete`). Manages session lifecycle. Supports graceful startup — adopts current Spotify playback and queue when coherent.
 - **Intelligence Pipeline** (`intelligence/`) — The track selection brain:
-  - `state-vector.ts` — 8D state (energy, valence, tempo, genre, familiarity, vocalness, aggressiveness, fatigue) updated via EMA (alpha=0.3)
-  - `selector.ts` — Orchestrator: state → steering blend → candidate pool → score → weighted random pick from top 5
-  - `scorer.ts` — 7-dimension scoring: stateSimilarity(25%), preference(20%), novelty(15%), transition(15%), fatigue(10%), context(10%), recency(5%)
+  - `state-vector.ts` — 8D state (energy, valence, tempo, genre, familiarity, vocalness, aggressiveness, fatigue) updated via EMA (alpha=0.2). Skips null audio features.
+  - `selector.ts` — Orchestrator: state → steering blend → candidate pool → score → weighted random pick from top 3
+  - `scorer.ts` — 8-dimension scoring: stateSimilarity(20%), genre(15%), preference(15%), transition(15%), novelty(10%), fatigue(10%), context(10%), recency(5%)
   - `steering.ts` — 7-axis user controls blended 40% into target state
   - `candidate-pool.ts` — Filters library by energy/genre/tempo proximity, excludes recent tracks/artists
   - `feedback.ts` — Like/dislike/skip → preference score adjustments
   - `context-learning.ts` — Learns time-of-day patterns across sessions
+  - `coherence.ts` — Queue coherence analysis for graceful startup
+  - `request-handler.ts` — Natural language music request processing
 - **Spotify** (`spotify/`) — PKCE OAuth, SDK wrapper, library sync, player control
 - **AI** (`ai/`) — Ollama client with structured JSON prompts. Functions: session naming, recaps, monthly recaps, context inference, weight suggestions. All fire-and-forget; never blocks playback.
-- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, 3 migration versions. 10 repository classes for data access.
+- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, 4 migration versions. 12 repository classes for data access. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
 - **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), player poll (5s), analytics compute (midnight), monthly recap (1st of month)
 
 **Key patterns:**
@@ -59,6 +67,8 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
 - Error hierarchy: `OrpheusError` base → `SpotifyAuthError`, `SpotifyApiError`, `PlaybackError`, `DatabaseError`, `AiError`
 - Config validated via Zod schema (`config.ts`)
 - ESM throughout (`"type": "module"` in package.json)
+- Graceful startup: engine checks current Spotify playback, analyzes queue coherence, adopts coherent tracks without interrupting
+- SAVEPOINT transactions for batch DB operations (node:sqlite lacks `db.transaction()`)
 
 ### Client (`client/lib/`)
 
