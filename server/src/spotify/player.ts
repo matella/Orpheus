@@ -160,3 +160,40 @@ export async function transferPlayback(deviceId: string): Promise<void> {
     body: JSON.stringify({ device_ids: [deviceId], play: false }),
   });
 }
+
+/**
+ * Create a new playlist on the user's Spotify account.
+ */
+export async function createSpotifyPlaylist(
+  name: string,
+  description: string,
+  isPublic: boolean = false,
+): Promise<{ id: string; url: string }> {
+  const me = await spotifyFetch<{ id: string }>('/me');
+  if (!me?.id) throw new Error('Could not fetch Spotify user ID');
+  const data = await spotifyFetch<{ id: string; external_urls: { spotify: string } }>(
+    `/users/${me.id}/playlists`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ name, description, public: isPublic }),
+    },
+  );
+  if (!data?.id) throw new Error('Spotify playlist creation returned no data');
+  return { id: data.id, url: data.external_urls.spotify };
+}
+
+/**
+ * Add tracks to a Spotify playlist. Batches in groups of 100 (Spotify limit).
+ */
+export async function addTracksToPlaylist(
+  playlistId: string,
+  uris: string[],
+): Promise<void> {
+  for (let i = 0; i < uris.length; i += 100) {
+    const batch = uris.slice(i, i + 100);
+    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+      method: 'POST',
+      body: JSON.stringify({ uris: batch }),
+    });
+  }
+}

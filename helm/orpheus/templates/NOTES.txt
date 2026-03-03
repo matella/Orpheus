@@ -1,0 +1,55 @@
+=======================================================
+  ORPHEUS — Autonomous Music Intelligence
+=======================================================
+
+Deployment complete!
+
+{{- if .Values.ingress.enabled }}
+
+Access Orpheus at:
+  {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.global.domain }}
+
+Make sure {{ .Values.global.domain }} resolves to your k3s node IP.
+You can add it to /etc/hosts:
+  <node-ip>  {{ .Values.global.domain }}
+
+{{- else }}
+
+No Ingress enabled. Access via port-forward:
+  kubectl port-forward svc/{{ include "orpheus.client.fullname" . }} 8080:{{ .Values.client.port }}
+  Then open: http://localhost:8080
+
+{{- end }}
+
+{{- if not .Values.server.persistence.enabled }}
+
+⚠️  WARNING: Server persistence is DISABLED!
+  Data is stored in an emptyDir volume and will be LOST when the pod restarts.
+  Enable persistence for production use:
+    helm upgrade {{ .Release.Name }} ./helm/orpheus --set server.persistence.enabled=true
+
+{{- end }}
+
+Spotify OAuth:
+  1. Register this redirect URI in your Spotify Developer Dashboard:
+     {{ include "orpheus.spotify.redirectUri" . }}
+  2. Open the app and authenticate via Settings
+
+{{- if .Values.ollama.enabled }}
+
+Ollama AI (model: {{ .Values.ollama.model }}):
+  Pull the model after the pod is running:
+    kubectl exec -it {{ include "orpheus.ollama.fullname" . }}-0 -- ollama pull {{ .Values.ollama.model }}
+
+  Verify it's loaded:
+    kubectl exec -it {{ include "orpheus.ollama.fullname" . }}-0 -- ollama list
+{{- else }}
+
+Ollama AI: Disabled
+  Enable with: helm upgrade {{ .Release.Name }} ./helm/orpheus --set ollama.enabled=true
+{{- end }}
+
+Useful commands:
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl logs -l app.kubernetes.io/component=server
+  kubectl logs -l app.kubernetes.io/component=client

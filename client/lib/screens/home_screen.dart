@@ -10,6 +10,7 @@ import '../services/websocket_service.dart';
 import '../widgets/now_playing_card.dart';
 import '../widgets/feedback_buttons.dart';
 import '../widgets/steering_slider.dart';
+import 'package:go_router/go_router.dart';
 
 /// Slider configuration: key, label, left endpoint, right endpoint.
 const _sliderConfig = [
@@ -396,6 +397,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('ORPHEUS')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.go('/playlist'),
+        icon: const Icon(Icons.queue_music_rounded),
+        label: Text(
+          'PLAYLIST',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+          ),
+        ),
+        backgroundColor: OrpheusColors.lyreGold,
+        foregroundColor: OrpheusColors.obsidian,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),

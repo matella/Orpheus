@@ -1,0 +1,67 @@
+{
+  "happy": {
+    "genres": ["pop", "funk", "reggae", "latin", "k-pop", "disco"],
+    "energy": [0.5, 0.9],
+    "valence": [0.6, 1.0]
+  },
+  "sad": {
+    "genres": ["folk", "blues", "indie", "classical", "soul"],
+    "energy": [0.1, 0.4],
+    "valence": [0.0, 0.35]
+  },
+  "energetic": {
+    "genres": ["edm", "punk", "metal", "drum and bass", "hip-hop", "rock"],
+    "energy": [0.65, 1.0],
+    "valence": [0.4, 1.0]
+  },
+  "chill": {
+    "genres": ["lo-fi", "ambient", "bossa nova", "trip-hop", "dream pop", "jazz"],
+    "energy": [0.1, 0.45],
+    "valence": [0.3, 0.7]
+  },
+  "romantic": {
+    "genres": ["r&b", "soul", "jazz", "bossa nova", "indie"],
+    "energy": [0.2, 0.55],
+    "valence": [0.4, 0.8]
+  },
+  "angry": {
+    "genres": ["metal", "punk", "hip-hop", "nu-metal", "death-metal"],
+    "energy": [0.7, 1.0],
+    "valence": [0.0, 0.35]
+  },
+  "focused": {
+    "genres": ["ambient", "lo-fi", "classical", "post-rock", "techno"],
+    "energy": [0.15, 0.5],
+    "valence": [0.3, 0.6]
+  },
+  "nostalgic": {
+    "genres": ["synth-pop", "rock", "pop", "soul", "folk", "disco"],
+    "energy": [0.3, 0.6],
+    "valence": [0.3, 0.7]
+  },
+  "melancholic": {
+    "genres": ["post-rock", "shoegaze", "dream pop", "folk", "classical"],
+    "energy": [0.1, 0.45],
+    "valence": [0.0, 0.3]
+  },
+  "party": {
+    "genres": ["edm", "reggaeton", "hip-hop", "pop", "funk", "house"],
+    "energy": [0.7, 1.0],
+    "valence": [0.5, 1.0]
+  },
+  "dark": {
+    "genres": ["metal", "post-rock", "ambient", "trip-hop", "black-metal"],
+    "energy": [0.3, 0.8],
+    "valence": [0.0, 0.3]
+  },
+  "workout": {
+    "genres": ["edm", "hip-hop", "rock", "metal", "pop", "drum and bass"],
+    "energy": [0.75, 1.0],
+    "valence": [0.4, 0.9]
+  },
+  "sleepy": {
+    "genres": ["ambient", "classical", "lo-fi", "folk", "jazz"],
+    "energy": [0.0, 0.25],
+    "valence": [0.2, 0.6]
+  }
+}

@@ -106,7 +106,7 @@ export function buildWeightSuggestionPrompt(ctx: SessionContext): string {
     .map((i) => `  - ${i.trackName} by ${i.artist}: ${i.interactionType}${i.completionRatio != null ? ` (${(i.completionRatio * 100).toFixed(0)}% listened)` : ''}`)
     .join('\n');
 
-  return `You are an AI music advisor for an adaptive music system. Analyze the current listening session and suggest scoring weight multipliers.
+  return `Analyze this listening session and suggest scoring weight multipliers.
 
 SESSION STATE:
 - Tracks played: ${ctx.trackCount}
@@ -195,7 +195,7 @@ export function buildInsightPrompt(ctx: SessionContext): string {
     ? `\n- Listener profile: ${ctx.spotifyGlobal.listeningProfile}`
     : '';
 
-  return `You are a music listening companion. Generate ONE brief, interesting insight about the current listening session.
+  return `Generate ONE brief, interesting insight about this listening session.
 
 SESSION:
 - Tracks: ${ctx.trackCount}
@@ -228,7 +228,7 @@ export interface SessionRecapContext {
 }
 
 export function buildSessionRecapPrompt(ctx: SessionRecapContext): string {
-  return `You are a music listening companion. Write a brief, personal recap of a listening session that just ended.
+  return `Write a brief, personal recap of this listening session that just ended.
 
 SESSION:
 - ${ctx.trackCount} tracks over ${ctx.durationMinutes} minutes
@@ -273,7 +273,7 @@ export function buildMonthlyRecapPrompt(ctx: MonthlyRecapContext): string {
     ? ctx.sessionNames.slice(0, 5).join(', ')
     : 'unnamed sessions';
 
-  return `You are a music listening companion writing a monthly listening recap for ${monthName} ${ctx.year}.
+  return `Write a monthly listening recap for ${monthName} ${ctx.year}.
 
 STATS:
 - ${ctx.totalHours.toFixed(1)} hours of music across ${ctx.totalSessions} sessions
@@ -307,7 +307,7 @@ export interface ParsedMusicRequest {
 }
 
 export function buildPromptParsePrompt(userPrompt: string): string {
-  return `You are a music request parser for an intelligent music player. Parse the user's natural language request into structured data.
+  return `Parse this natural language music request into structured data.
 
 USER REQUEST: "${userPrompt}"
 
@@ -337,7 +337,7 @@ export interface ArtistSuggestion {
 }
 
 export function buildArtistSuggestionPrompt(userPrompt: string): string {
-  return `You are a music expert helping an intelligent music player find tracks on Spotify. The user made a vague music request that didn't return enough results from a keyword search.
+  return `The user made a vague music request that didn't return enough results from a keyword search. Consider the user's library context from the system prompt when suggesting artists.
 
 USER REQUEST: "${userPrompt}"
 
@@ -375,6 +375,79 @@ export interface ContextInferenceInput {
   recentGenres: string[];
 }
 
+// ── Playlist Generation ──────────────────────────────────────────
+
+export interface PlaylistNameSuggestion {
+  name: string;
+  description: string;
+}
+
+export interface PlaylistPromptParsed extends ParsedMusicRequest {
+  suggestedEnergyArc?: string | null;
+  suggestedBpmRange?: [number, number] | null;
+}
+
+export function buildPlaylistPromptParsePrompt(userPrompt: string): string {
+  return `Parse this playlist request into structured data for curated playlist generation.
+
+USER REQUEST: "${userPrompt}"
+
+Extract the following:
+- artists: Artist names mentioned (empty array if none)
+- genres: Genres/subgenres mentioned, normalized to lowercase (empty array if none)
+- moods: Mood/atmosphere descriptors like "chill", "energetic", "focus", "party" (empty array if none)
+- descriptors: Special intent keywords like "new", "discovery", "deep cuts", "popular", "favorites" (empty array if none)
+- trackCount: Rough number of tracks implied (default 15, max 50). Look for hints like "a few" (8), "long playlist" (30), explicit numbers.
+- searchSpotify: true if the request likely needs tracks beyond the user's library (specific artists, niche genres). false for general mood/vibe requests.
+- suggestedEnergyArc: If the prompt implies an energy shape, suggest one of: "steady", "build_up", "wind_down", "peak_and_fade". null if not implied. Examples: "workout warmup" = "build_up", "winding down for sleep" = "wind_down", "study session" = "steady".
+- suggestedBpmRange: If a BPM range is implied (e.g., "upbeat" = [110, 140], "chill" = [70, 100], "high energy" = [130, 180]), return [min, max]. null if not implied.
+
+Respond with ONLY this JSON format:
+{
+  "artists": [],
+  "genres": [],
+  "moods": [],
+  "descriptors": [],
+  "trackCount": 15,
+  "searchSpotify": false,
+  "suggestedEnergyArc": null,
+  "suggestedBpmRange": null
+}`;
+}
+
+export function buildPlaylistNamePrompt(context: {
+  prompt: string;
+  trackCount: number;
+  durationMinutes: number;
+  dominantGenres: string[];
+  avgEnergy: number;
+  avgValence: number;
+  energyArc: string;
+  sampleTrackNames: string[];
+}): string {
+  return `Generate a name and description for this playlist.
+
+ORIGINAL REQUEST: "${context.prompt}"
+
+PLAYLIST STATS:
+- ${context.trackCount} tracks, ${context.durationMinutes} minutes
+- Genres: ${context.dominantGenres.join(', ') || 'varied'}
+- Average energy: ${context.avgEnergy.toFixed(2)} (0=calm, 1=intense)
+- Average mood: ${context.avgValence.toFixed(2)} (0=dark, 1=bright)
+- Energy arc: ${context.energyArc}
+- Sample tracks: ${context.sampleTrackNames.slice(0, 5).join(', ')}
+
+Generate:
+1. A creative playlist name (2-5 words, evocative and poetic)
+2. A 1-2 sentence description capturing the playlist's mood and journey
+
+Respond with ONLY this JSON format:
+{
+  "name": "Your Playlist Name",
+  "description": "A brief description of the playlist mood and journey"
+}`;
+}
+
 export function buildContextInferencePrompt(ctx: ContextInferenceInput): string {
   const learnedSection = ctx.learnedPrefs
     ? `LEARNED PREFERENCES for ${ctx.timeBracket} (from ${ctx.learnedPrefs.sampleCount} sessions):
@@ -387,7 +460,7 @@ export function buildContextInferencePrompt(ctx: ContextInferenceInput): string 
     ? ctx.recentSessionMoods.join(', ')
     : 'none available';
 
-  return `You are an AI music advisor. Suggest the ideal initial listening state for a new session starting now.
+  return `Suggest the ideal initial listening state for a new session starting now. Use the user's library context and listening patterns from the system prompt to ground your suggestions.
 
 CONTEXT:
 - Time: ${ctx.timeBracket} (${ctx.dayOfWeek})

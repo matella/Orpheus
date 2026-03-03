@@ -451,6 +451,77 @@ export async function refreshPreferencesFromTopTracks(): Promise<number> {
 }
 
 /**
+ * Get track recommendations from Spotify using seed tracks/artists/genres.
+ * Upserts results into the local DB and returns TrackRow objects.
+ * Handles 403 gracefully (some apps are restricted from this endpoint).
+ */
+export async function getSpotifyRecommendations(params: {
+  seedTracks?: string[];
+  seedArtists?: string[];
+  seedGenres?: string[];
+  targetEnergy?: number;
+  targetValence?: number;
+  targetTempo?: number;
+  limit?: number;
+}): Promise<import('../database/types.js').TrackRow[]> {
+  const query = new URLSearchParams();
+
+  // Spotify requires at least 1 seed, max 5 total across all types
+  const seedTracks = (params.seedTracks ?? []).slice(0, 5);
+  const seedArtists = (params.seedArtists ?? []).slice(0, Math.max(0, 5 - seedTracks.length));
+  const seedGenres = (params.seedGenres ?? []).slice(0, Math.max(0, 5 - seedTracks.length - seedArtists.length));
+
+  if (seedTracks.length === 0 && seedArtists.length === 0 && seedGenres.length === 0) {
+    logger.debug('No seeds provided for recommendations');
+    return [];
+  }
+
+  if (seedTracks.length > 0) query.set('seed_tracks', seedTracks.join(','));
+  if (seedArtists.length > 0) query.set('seed_artists', seedArtists.join(','));
+  if (seedGenres.length > 0) query.set('seed_genres', seedGenres.join(','));
+  if (params.targetEnergy != null) query.set('target_energy', String(params.targetEnergy));
+  if (params.targetValence != null) query.set('target_valence', String(params.targetValence));
+  if (params.targetTempo != null) query.set('target_tempo', String(params.targetTempo));
+  query.set('limit', String(Math.min(params.limit ?? 20, 100)));
+
+  try {
+    const data = await spotifyFetch<{ tracks: any[] }>(`/recommendations?${query.toString()}`);
+
+    if (!data.tracks || data.tracks.length === 0) return [];
+
+    const tracks: UpsertTrackData[] = data.tracks.map((item: any) => ({
+      spotifyId: item.id,
+      name: item.name,
+      artist: item.artists.map((a: any) => a.name).join(', '),
+      artistId: item.artists[0]?.id ?? undefined,
+      album: item.album?.name,
+      albumArtUrl: item.album?.images?.[0]?.url,
+      durationMs: item.duration_ms,
+      source: 'search',
+    }));
+
+    upsertTracks(tracks);
+
+    // Return full TrackRow objects from DB
+    const results: import('../database/types.js').TrackRow[] = [];
+    for (const t of tracks) {
+      const row = getTrackBySpotifyId(t.spotifyId);
+      if (row) results.push(row);
+    }
+
+    logger.info({ seedCount: seedTracks.length + seedArtists.length + seedGenres.length, results: results.length }, 'Spotify recommendations fetched');
+    return results;
+  } catch (err) {
+    if (err instanceof SpotifyApiError && err.statusCode === 403) {
+      logger.warn('Recommendations endpoint returned 403 -- Spotify restricts this for some apps');
+      return [];
+    }
+    logger.warn({ err }, 'Spotify recommendations failed');
+    return [];
+  }
+}
+
+/**
  * Run a full library sync: saved tracks, top tracks, top artists,
  * recently played, audio features, artist genres, and preference management.
  */

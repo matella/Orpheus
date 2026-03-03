@@ -44,6 +44,10 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
                                |   Preferences, Sessions,   |
                                |   State History, Analytics |
                                +---------------------------+
+                               | AI Knowledge (RAG)         |
+                               |   Genre aliases, mood maps |
+                               |   Library context injection|
+                               +---------------------------+
                                | Ollama (optional)          |
                                |   Session naming, recaps,  |
                                |   context inference        |
@@ -125,13 +129,31 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - Daily sparklines for quick trend visualization
 - Comprehensive listening stats combining Orpheus and Spotify data
 
+### Playlist Generation
+- AI-enhanced playlist creation from natural language prompts ("chill jazz for a long flight", "high energy workout mix")
+- Configurable parameters: duration (5–180 min), discovery rate (0–100% new songs), energy arc (steady, build up, wind down, peak & fade), transition smoothness, max tracks per artist, source preference (library only or library + Spotify discovery)
+- Reuses the full 8-dimension scoring pipeline — candidates scored per energy arc segment with synthetic scoring contexts
+- Greedy nearest-neighbor track ordering for smooth transitions (BPM, energy, valence, key compatibility)
+- Optional seed track anchoring from currently playing track
+- AI prompt parsing extracts artists, genres, moods, BPM range from natural language (keyword fallback when AI unavailable)
+- AI-generated creative playlist names and descriptions
+- Automatic Spotify playlist creation and track population
+- Real-time WebSocket progress events during generation
+- Playlist history with full track lists, scores, and metadata
+
 ### AI Integration (Optional)
 - Powered by Ollama running locally (default model: llama3.2)
+- **Rich System Prompt:** Three-level system prompt architecture (`full`/`light`/`minimal`) with music expert persona, genre normalization, mood mappings, and output format rules
+- **RAG Context Injection:** Full-level prompts include the user's actual library stats — top genres, favorite artists, preferred tracks, listening hours, discovery rate, and time-of-day patterns
+- **Genre Aliases:** Extensible `genre_aliases.json` (~40 canonical genres with aliases) loaded at startup; normalizes variant spellings (e.g., "kpop" → "k-pop") across AI and keyword parsers
+- **Mood Mappings:** Extensible `mood_mappings.json` (~13 moods mapped to genres + energy/valence ranges) for mood-to-music translation
 - **Session Naming:** LLM generates evocative session names from track lists
 - **Session Recaps:** Narrative summaries of each listening session
 - **Monthly Recaps:** End-of-month listening personality analysis with stats
 - **Context Inference:** LLM suggests initial state values based on time, weather context, and recent patterns
 - **Advisory Suggestions:** Periodic in-session analysis recommending energy/genre shifts
+- **Playlist Prompt Parsing:** Extracts structured parameters from natural language playlist descriptions
+- **Playlist Naming:** Generates creative 2–5 word names and descriptions for generated playlists
 - Graceful degradation: all AI features are no-ops when Ollama is unavailable
 
 ### Real-time Updates
@@ -183,6 +205,10 @@ All routes are prefixed with `/api`.
 | AI | `/ai/recaps` | GET | All monthly recaps |
 | AI | `/ai/recaps` | POST | Generate monthly recap |
 | AI | `/ai/infer` | POST | AI context inference |
+| Playlists | `/playlists/generate` | POST | Generate AI-enhanced playlist |
+| Playlists | `/playlists` | GET | List playlist history (paginated) |
+| Playlists | `/playlists/:id` | GET | Get playlist with tracks |
+| Playlists | `/playlists/:id` | DELETE | Delete playlist from local DB |
 | WebSocket | `/ws` | WS | Real-time event stream |
 
 ---
@@ -193,20 +219,21 @@ All routes are prefixed with `/api`.
 Music/
   server/
     src/
-      ai/                    # Ollama client, prompts, AI service
+      ai/                    # Ollama client, prompts, AI service, knowledge/RAG
       api/
         middleware/           # Error handler
         routes/               # auth, playback, steering, sessions,
-                              # analytics, settings, context, ai
+                              # analytics, settings, context, ai, playlist
         server.ts             # Fastify setup and route registration
         websocket.ts          # WebSocket broadcast infrastructure
       database/
         connection.ts         # SQLite connection (node:sqlite)
-        migrations.ts         # Schema v1-v4
+        migrations.ts         # Schema v1-v5
         repositories/         # track, interaction, session, preference,
                               # state-history, analytics, settings,
                               # time-preferences, ai-suggestion,
-                              # monthly-recap, listening-stats, top-artists
+                              # monthly-recap, listening-stats, top-artists,
+                              # playlist
         types.ts              # Row type interfaces
       intelligence/
         state-vector.ts       # 8D state with EMA blending
@@ -218,6 +245,7 @@ Music/
         context-learning.ts   # Time-of-day preference learning
         coherence.ts          # Queue coherence analysis
         request-handler.ts    # Natural language request processing
+        playlist-generator.ts # AI-enhanced playlist generation pipeline
         types.ts              # Intelligence type definitions
       playback/
         engine.ts             # Session lifecycle, track advancement
@@ -244,7 +272,10 @@ Music/
         types.ts              # Spotify type definitions
       config.ts               # Zod-validated environment config
       index.ts                # Application entry point
-    data/                     # SQLite database (auto-created)
+    data/
+      orpheus.db              # SQLite database (auto-created)
+      genre_aliases.json      # Genre alias map (~40 genres)
+      mood_mappings.json      # Mood-to-genre/energy/valence mappings
     .env                      # Environment variables (not committed)
     .env.example              # Environment template
 
@@ -257,12 +288,14 @@ Music/
       providers/
         session_provider.dart # Session state management
         steering_provider.dart# Steering control state
+        playlist_provider.dart# Playlist generation state + WS progress
       screens/
-        home_screen.dart      # Now playing, quick controls
+        home_screen.dart      # Now playing, quick controls, playlist FAB
         session_screen.dart   # Session history, energy curves
         analytics_screen.dart # Charts and stats dashboard
         intelligence_screen.dart # AI status, suggestions, recaps
         settings_screen.dart  # Automation and preference settings
+        playlist_screen.dart  # Playlist creation form + result view
         auth_screen.dart      # Spotify login
         shell_screen.dart     # Bottom navigation shell
       services/
@@ -284,12 +317,13 @@ Music/
 
 ## Database Schema
 
-SQLite with 4 migration versions:
+SQLite with 5 migration versions:
 
 - **v1:** Core tables — `tracks`, `interactions`, `sessions`, `preferences`, `state_history`, `steering_history`, `time_preferences`, `analytics_cache`, `settings`, `auth_tokens`
 - **v2:** AI support — `ai_suggestions` table, AI-related settings
 - **v3:** Reasoning layer — `session_name` column on sessions, `monthly_recaps` table
 - **v4:** Spotify top artists — `spotify_top_artists` table, listening stats cache support
+- **v5:** Playlist generation — `playlists` table (prompt, parameters, Spotify link, stats), `playlist_tracks` table (track positions, scores, segments with CASCADE delete)
 
 ---
 
@@ -344,6 +378,36 @@ The client is served on **port 80** (nginx), the server API on **port 3000**, an
 The SQLite database is persisted in the `server-data` Docker volume. Ollama models are persisted in `ollama-data`.
 
 > **Note:** You still need a `server/.env` file with your Spotify credentials before building. See [Setup Guide](SETUP.md).
+
+---
+
+## Kubernetes (k3s + Helm)
+
+Deploy to a self-hosted k3s cluster using the included Helm chart:
+
+```bash
+# Build and import images into k3s
+docker build -t orpheus-server:latest ./server
+docker build -t orpheus-client:latest ./client
+docker save orpheus-server:latest | sudo k3s ctr images import -
+docker save orpheus-client:latest | sudo k3s ctr images import -
+
+# Deploy with Helm
+helm install orpheus ./helm/orpheus \
+  --set spotify.clientId=YOUR_ID \
+  --set spotify.clientSecret=YOUR_SECRET \
+  --set global.domain=orpheus.local
+
+# Enable Ollama AI
+helm upgrade orpheus ./helm/orpheus --set ollama.enabled=true
+
+# Pull the AI model
+kubectl exec -it orpheus-ollama-0 -- ollama pull llama3.2
+```
+
+The chart includes: server Deployment (with PVC for SQLite), client Deployment (nginx with templated reverse proxy), optional Ollama StatefulSet (with GPU support), Traefik Ingress, and Spotify credentials Secret.
+
+See the full setup guide: [helm/README.md](helm/README.md)
 
 ---
 

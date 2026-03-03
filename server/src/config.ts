@@ -46,7 +46,7 @@ function loadConfig(): Config {
       level: process.env.LOG_LEVEL ?? 'info',
     },
     ai: {
-      enabled: process.env.AI_ENABLED !== 'false',
+      enabled: process.env.AI_ENABLED === 'true',
       ollamaHost: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
       ollamaModel: process.env.OLLAMA_MODEL ?? 'llama3.2',
     },

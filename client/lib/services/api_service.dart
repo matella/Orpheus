@@ -225,6 +225,38 @@ class ApiService {
     return response.data;
   }
 
+  // --- Playlist Generation ---
+
+  /// Generate a curated playlist
+  Future<Map<String, dynamic>> generatePlaylist(Map<String, dynamic> params) async {
+    final response = await _dio.post(
+      '/playlists/generate',
+      data: params,
+      options: Options(receiveTimeout: const Duration(seconds: 60)),
+    );
+    return response.data;
+  }
+
+  /// Get playlist history (paginated)
+  Future<Map<String, dynamic>> getPlaylists({int limit = 20, int offset = 0}) async {
+    final response = await _dio.get('/playlists', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    return response.data;
+  }
+
+  /// Get a single playlist with tracks
+  Future<Map<String, dynamic>> getPlaylistDetail(int id) async {
+    final response = await _dio.get('/playlists/$id');
+    return response.data;
+  }
+
+  /// Delete a playlist from local DB
+  Future<void> deletePlaylist(int id) async {
+    await _dio.delete('/playlists/$id');
+  }
+
   // --- Analytics ---
 
   /// Get overview analytics (cached on server)

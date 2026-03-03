@@ -5,6 +5,7 @@ import { searchSpotifyAndUpsert } from '../spotify/search.js';
 import { selector } from './selector.js';
 import type { TrackRow } from '../database/types.js';
 import type { ParsedMusicRequest } from '../ai/prompts.js';
+import { getGenreAliases } from '../ai/knowledge.js';
 
 const MAX_REQUEST_TRACKS = 10;
 const DEFAULT_TRACK_COUNT = 5;
@@ -165,8 +166,22 @@ function parseWithKeywords(prompt: string): ParsedMusicRequest {
   const moods: string[] = [];
   const descriptors: string[] = [];
 
-  // Genre detection
-  for (const [genre, keywords] of Object.entries(GENRE_KEYWORDS)) {
+  // Genre detection — merge loaded aliases for broader coverage
+  const aliasMap = getGenreAliases();
+  const effectiveGenreKeywords: Record<string, string[]> = { ...GENRE_KEYWORDS };
+  if (aliasMap) {
+    for (const [canon, aliases] of Object.entries(aliasMap)) {
+      if (effectiveGenreKeywords[canon]) {
+        const existing = new Set(effectiveGenreKeywords[canon]);
+        for (const a of aliases) existing.add(a);
+        effectiveGenreKeywords[canon] = [...existing];
+      } else {
+        effectiveGenreKeywords[canon] = [canon, ...aliases];
+      }
+    }
+  }
+
+  for (const [genre, keywords] of Object.entries(effectiveGenreKeywords)) {
     if (keywords.some((kw) => lower.includes(kw))) {
       genres.push(genre);
     }

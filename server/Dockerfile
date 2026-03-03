@@ -21,7 +21,12 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 
-RUN mkdir -p data
+RUN mkdir -p data && \
+    addgroup -g 1001 -S orpheus && \
+    adduser -u 1001 -S orpheus -G orpheus && \
+    chown -R orpheus:orpheus /app
+
+USER orpheus
 
 EXPOSE 3000
 

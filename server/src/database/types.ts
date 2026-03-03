@@ -114,3 +114,33 @@ export interface SpotifyTopArtistRow {
   rank: number;
   synced_at: string;
 }
+
+export interface PlaylistRow {
+  id: number;
+  prompt: string;
+  name: string | null;
+  description: string | null;
+  duration_minutes: number;
+  discovery_rate: number;
+  energy_arc: string;
+  transition_smoothness: number;
+  max_per_artist: number;
+  seed_track_id: number | null;
+  source_preference: string;
+  spotify_playlist_id: string | null;
+  spotify_playlist_url: string | null;
+  track_count: number;
+  total_duration_ms: number;
+  generation_time_ms: number | null;
+  ai_enhanced: number;
+  created_at: string;
+}
+
+export interface PlaylistTrackRow {
+  id: number;
+  playlist_id: number;
+  track_id: number;
+  position: number;
+  score: number | null;
+  segment: number | null;
+}

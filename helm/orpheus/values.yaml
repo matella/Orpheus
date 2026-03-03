@@ -1,0 +1,86 @@
+# -- Global settings
+global:
+  # Domain for ingress and Spotify redirect URI auto-generation
+  domain: "orpheus.local"
+
+# -- Server (Node.js backend)
+server:
+  image:
+    repository: orpheus-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 3000
+  logLevel: info
+  persistence:
+    enabled: true
+    size: 1Gi
+    # Leave empty to use k3s default (local-path)
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Additional env vars (list of {name, value} objects)
+  extraEnv: []
+
+# -- Client (Flutter web + nginx)
+client:
+  image:
+    repository: orpheus-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# -- Ollama (optional AI module)
+ollama:
+  enabled: false
+  image:
+    repository: ollama/ollama
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 11434
+  model: llama3.2
+  persistence:
+    size: 20Gi
+    # Leave empty to use k3s default (local-path)
+    storageClass: ""
+  gpu:
+    enabled: false
+    # Number of nvidia.com/gpu to request
+    count: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+
+# -- Spotify credentials (stored as K8s Secret)
+spotify:
+  clientId: ""
+  clientSecret: ""
+  # Full redirect URI. If empty, auto-generated from global.domain
+  redirectUri: ""
+
+# -- Ingress
+ingress:
+  enabled: true
+  # k3s ships with Traefik by default
+  className: traefik
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: orpheus-tls

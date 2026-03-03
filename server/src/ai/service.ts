@@ -41,7 +41,12 @@ import {
   type SessionRecapContext,
   type MonthlyRecapContext,
   type ContextInferenceInput,
+  type PlaylistPromptParsed,
+  type PlaylistNameSuggestion,
+  buildPlaylistPromptParsePrompt,
+  buildPlaylistNamePrompt,
 } from './prompts.js';
+import { buildSystemPrompt } from './knowledge.js';
 
 // ── In-Memory Cache ────────────────────────────────────────────────
 
@@ -229,7 +234,8 @@ export async function analyzeSession(sessionId: number): Promise<WeightSuggestio
     if (!ctx || ctx.trackCount < AI_INSIGHT_MIN_TRACKS) return null;
 
     const prompt = buildWeightSuggestionPrompt(ctx);
-    const result = await generateJson<WeightSuggestion>(prompt);
+    const system = buildSystemPrompt('light');
+    const result = await generateJson<WeightSuggestion>(prompt, { system });
 
     if (!result) return null;
 
@@ -327,7 +333,8 @@ export async function generateSessionName(sessionId: number): Promise<string | n
       durationMinutes,
     });
 
-    const result = await generateJson<SessionNameSuggestion>(prompt);
+    const system = buildSystemPrompt('minimal');
+    const result = await generateJson<SessionNameSuggestion>(prompt, { system });
 
     if (!result?.name || typeof result.name !== 'string') return null;
 
@@ -362,7 +369,8 @@ export async function generateInsight(sessionId: number): Promise<string | null>
     if (!ctx || ctx.trackCount < AI_INSIGHT_MIN_TRACKS) return null;
 
     const prompt = buildInsightPrompt(ctx);
-    const result = await generateJson<InsightSuggestion>(prompt);
+    const system = buildSystemPrompt('light');
+    const result = await generateJson<InsightSuggestion>(prompt, { system });
 
     if (!result?.insight || typeof result.insight !== 'string') return null;
 
@@ -458,7 +466,8 @@ export async function generateSessionRecap(sessionId: number): Promise<SessionRe
     };
 
     const prompt = buildSessionRecapPrompt(ctx);
-    const result = await generateJson<SessionRecapSuggestion>(prompt);
+    const system = buildSystemPrompt('minimal');
+    const result = await generateJson<SessionRecapSuggestion>(prompt, { system });
 
     if (!result?.recap || typeof result.recap !== 'string') return null;
 
@@ -494,7 +503,8 @@ export async function generateMonthlyRecap(
 
   try {
     const prompt = buildMonthlyRecapPrompt(ctx);
-    const result = await generateJson<MonthlyRecapSuggestion>(prompt, { timeout: 30000 });
+    const system = buildSystemPrompt('minimal');
+    const result = await generateJson<MonthlyRecapSuggestion>(prompt, { timeout: 30000, system });
 
     if (!result?.recap || typeof result.recap !== 'string') return null;
 
@@ -520,7 +530,8 @@ export async function inferContextViaAi(
 
   try {
     const prompt = buildContextInferencePrompt(input);
-    const result = await generateJson<ContextInferenceSuggestion>(prompt);
+    const system = buildSystemPrompt('full');
+    const result = await generateJson<ContextInferenceSuggestion>(prompt, { system });
 
     if (!result || typeof result.energy !== 'number') return null;
 
@@ -554,7 +565,8 @@ export async function parseUserMusicRequest(
 
   try {
     const aiPrompt = buildPromptParsePrompt(prompt);
-    const result = await generateJson<ParsedMusicRequest>(aiPrompt, { timeout: 10000 });
+    const system = buildSystemPrompt('full');
+    const result = await generateJson<ParsedMusicRequest>(aiPrompt, { timeout: 10000, system });
 
     if (!result) return null;
 
@@ -585,7 +597,8 @@ export async function suggestArtistsForRequest(
 
   try {
     const aiPrompt = buildArtistSuggestionPrompt(prompt);
-    const result = await generateJson<ArtistSuggestion>(aiPrompt, { timeout: 15000 });
+    const system = buildSystemPrompt('full');
+    const result = await generateJson<ArtistSuggestion>(aiPrompt, { timeout: 15000, system });
 
     if (!result || !Array.isArray(result.artists) || result.artists.length === 0) {
       return null;
@@ -604,6 +617,75 @@ export async function suggestArtistsForRequest(
     return artists;
   } catch (err) {
     logger.warn({ err }, 'AI artist suggestion failed');
+    return null;
+  }
+}
+
+// ── Playlist Generation ──────────────────────────────────────────
+
+/**
+ * Parse a playlist prompt via AI into structured data with energy arc and BPM hints.
+ * Returns null if AI is unavailable (caller should use keyword fallback).
+ */
+export async function parsePlaylistPrompt(
+  prompt: string,
+): Promise<PlaylistPromptParsed | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const aiPrompt = buildPlaylistPromptParsePrompt(prompt);
+    const system = buildSystemPrompt('full');
+    const result = await generateJson<PlaylistPromptParsed>(aiPrompt, { timeout: 10000, system });
+
+    if (!result) return null;
+
+    return {
+      artists: Array.isArray(result.artists) ? result.artists.map(String) : [],
+      genres: Array.isArray(result.genres) ? result.genres.map(String) : [],
+      moods: Array.isArray(result.moods) ? result.moods.map(String) : [],
+      descriptors: Array.isArray(result.descriptors) ? result.descriptors.map(String) : [],
+      trackCount: typeof result.trackCount === 'number' ? Math.min(result.trackCount, 50) : 15,
+      searchSpotify: result.searchSpotify ?? true,
+      suggestedEnergyArc: result.suggestedEnergyArc ?? null,
+      suggestedBpmRange: Array.isArray(result.suggestedBpmRange) && result.suggestedBpmRange.length === 2
+        ? result.suggestedBpmRange as [number, number]
+        : null,
+    };
+  } catch (err) {
+    logger.warn({ err }, 'AI playlist prompt parsing failed');
+    return null;
+  }
+}
+
+/**
+ * Generate a creative playlist name and description via AI.
+ * Returns null if AI is unavailable (caller should use template fallback).
+ */
+export async function generatePlaylistName(context: {
+  prompt: string;
+  trackCount: number;
+  durationMinutes: number;
+  dominantGenres: string[];
+  avgEnergy: number;
+  avgValence: number;
+  energyArc: string;
+  sampleTrackNames: string[];
+}): Promise<PlaylistNameSuggestion | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const aiPrompt = buildPlaylistNamePrompt(context);
+    const system = buildSystemPrompt('minimal');
+    const result = await generateJson<PlaylistNameSuggestion>(aiPrompt, { timeout: 15000, system });
+
+    if (!result?.name || typeof result.name !== 'string') return null;
+
+    return {
+      name: result.name.trim().slice(0, 60),
+      description: typeof result.description === 'string' ? result.description.trim().slice(0, 200) : '',
+    };
+  } catch (err) {
+    logger.warn({ err }, 'AI playlist name generation failed');
     return null;
   }
 }

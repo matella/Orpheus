@@ -38,13 +38,13 @@ export async function isOllamaAvailable(): Promise<OllamaStatus> {
  */
 export async function generate(
   prompt: string,
-  options?: { timeout?: number },
+  options?: { timeout?: number; system?: string },
 ): Promise<string | null> {
   const timeout = options?.timeout ?? AI_REQUEST_TIMEOUT_MS;
   const start = Date.now();
 
   try {
-    logger.debug({ model: config.ai.ollamaModel, promptLength: prompt.length }, 'Ollama generate request');
+    logger.debug({ model: config.ai.ollamaModel, promptLength: prompt.length, hasSystem: !!options?.system }, 'Ollama generate request');
 
     const response = await fetch(`${config.ai.ollamaHost}/api/generate`, {
       method: 'POST',
@@ -53,6 +53,7 @@ export async function generate(
         model: config.ai.ollamaModel,
         prompt,
         stream: false,
+        ...(options?.system ? { system: options.system } : {}),
       }),
       signal: AbortSignal.timeout(timeout),
     });
@@ -82,13 +83,13 @@ export async function generate(
  */
 export async function generateJson<T>(
   prompt: string,
-  options?: { timeout?: number },
+  options?: { timeout?: number; system?: string },
 ): Promise<T | null> {
   const timeout = options?.timeout ?? AI_REQUEST_TIMEOUT_MS;
   const start = Date.now();
 
   try {
-    logger.debug({ model: config.ai.ollamaModel, promptLength: prompt.length }, 'Ollama generateJson request');
+    logger.debug({ model: config.ai.ollamaModel, promptLength: prompt.length, hasSystem: !!options?.system }, 'Ollama generateJson request');
 
     const response = await fetch(`${config.ai.ollamaHost}/api/generate`, {
       method: 'POST',
@@ -98,6 +99,7 @@ export async function generateJson<T>(
         prompt,
         stream: false,
         format: 'json',
+        ...(options?.system ? { system: options.system } : {}),
       }),
       signal: AbortSignal.timeout(timeout),
     });

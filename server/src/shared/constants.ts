@@ -60,6 +60,16 @@ export const STEERING_DEBOUNCE_MS = 300;
 export const TOP_TRACK_NUDGE_FACTOR = 0.2;          // Fraction of preference gap applied per sync
 export const TOP_TRACK_NUDGE_MIN_THRESHOLD = 0.005;  // Skip negligible preference deltas
 
+// Playlist generation
+export const PLAYLIST_MAX_DURATION_MINUTES = 180;
+export const PLAYLIST_MIN_DURATION_MINUTES = 5;
+export const PLAYLIST_MAX_TRACKS = 100;
+export const PLAYLIST_ENERGY_ARC_SEGMENTS = 5;
+export const PLAYLIST_DEFAULT_DISCOVERY_RATE = 0.3;
+export const PLAYLIST_DEFAULT_SMOOTHNESS = 0.5;
+export const PLAYLIST_DEFAULT_MAX_PER_ARTIST = 3;
+export const PLAYLIST_SPOTIFY_DISCOVERY_LIMIT = 30;
+
 // AI integration
 export const AI_ANALYSIS_INTERVAL = 5; // Analyze session every N tracks
 export const AI_REQUEST_TIMEOUT_MS = 15000; // 15s max for Ollama calls

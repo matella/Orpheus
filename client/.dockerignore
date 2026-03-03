@@ -6,4 +6,9 @@ build
 *.iml
 .git
 .gitignore
+.metadata
+.idea
+.vscode
+*.md
 test
+analysis_options.yaml

@@ -8,6 +8,7 @@ import { registerAnalyticsComputeTask } from './scheduler/tasks/compute-analytic
 import { registerMonthlyRecapTask } from './scheduler/tasks/monthly-recap.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { engine } from './playback/engine.js';
+import { loadKnowledgeFiles } from './ai/knowledge.js';
 
 async function main() {
   logger.info('');
@@ -17,6 +18,9 @@ async function main() {
   // Initialize database
   const db = initDb();
   runMigrations(db);
+
+  // Load AI knowledge files (genre aliases, mood mappings)
+  loadKnowledgeFiles();
 
   // Start API server
   await startServer();

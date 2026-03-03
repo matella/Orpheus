@@ -12,8 +12,10 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 3000
-      DB_PATH: ./data/orpheus.db
+      DB_PATH: /app/data/orpheus.db
       OLLAMA_HOST: http://ollama:11434
+      # AI_ENABLED is opt-in (defaults to false when unset).
+      # Set AI_ENABLED=true in server/.env when using: docker compose --profile ai up
     volumes:
       - server-data:/app/data
     depends_on:
@@ -40,6 +42,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider --quiet http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     profiles:
       - ai
 

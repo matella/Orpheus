@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 /**
  * Run all database migrations.
@@ -24,6 +24,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 4) {
     migrateV4(db);
+  }
+
+  if (version < 5) {
+    migrateV5(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -306,4 +310,50 @@ function migrateV4(db: DatabaseSync): void {
 
   setSchemaVersion(db, 4);
   logger.info('Migration v4 complete');
+}
+
+function migrateV5(db: DatabaseSync): void {
+  logger.info('Running migration v5: playlist generation');
+
+  db.exec(`
+    -- Generated playlists
+    CREATE TABLE IF NOT EXISTS playlists (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt                TEXT NOT NULL,
+      name                  TEXT,
+      description           TEXT,
+      duration_minutes      INTEGER NOT NULL,
+      discovery_rate        REAL NOT NULL DEFAULT 0.3,
+      energy_arc            TEXT NOT NULL DEFAULT 'steady',
+      transition_smoothness REAL NOT NULL DEFAULT 0.5,
+      max_per_artist        INTEGER NOT NULL DEFAULT 3,
+      seed_track_id         INTEGER REFERENCES tracks(id),
+      source_preference     TEXT NOT NULL DEFAULT 'library',
+      spotify_playlist_id   TEXT,
+      spotify_playlist_url  TEXT,
+      track_count           INTEGER DEFAULT 0,
+      total_duration_ms     INTEGER DEFAULT 0,
+      generation_time_ms    INTEGER,
+      ai_enhanced           INTEGER DEFAULT 0,
+      created_at            TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_playlists_created ON playlists(created_at);
+
+    -- Tracks belonging to generated playlists
+    CREATE TABLE IF NOT EXISTS playlist_tracks (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      track_id    INTEGER NOT NULL REFERENCES tracks(id),
+      position    INTEGER NOT NULL,
+      score       REAL,
+      segment     INTEGER,
+      UNIQUE(playlist_id, position)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id);
+  `);
+
+  setSchemaVersion(db, 5);
+  logger.info('Migration v5 complete');
 }

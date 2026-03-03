@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orpheus.client.fullname" . }}
+  labels:
+    {{- include "orpheus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: client
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.client.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: orpheus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: client
