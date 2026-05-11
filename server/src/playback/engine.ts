@@ -317,6 +317,8 @@ class PlaybackEngine extends EventEmitter {
       transitionMode: this.transitionMode,
       adoptedTrackCount: this.adoptedTrackCount,
       coherenceScore: this.coherenceScore,
+      targetGenre: selector.getTargetGenre(),
+      targetArtist: selector.getTargetArtist(),
     };
   }
 
@@ -1064,11 +1066,16 @@ class PlaybackEngine extends EventEmitter {
 
   private emitState(): void {
     const current = this.queue.getCurrent();
+    // Include the session's dominant genre from the state vector (more reliable
+    // than individual track genreCluster which is often null)
+    const sessionId = this.session.getSessionId();
+    const stateVector = sessionId ? stateVectorManager.getState(sessionId) : null;
     this.emit('state_updated', {
       state: this.getState(),
       current,
       next: this.queue.peekNext(),
       trajectory: this.getTrajectory(),
+      currentGenre: stateVector?.genreCluster ?? current?.genreCluster ?? null,
     });
   }
 }

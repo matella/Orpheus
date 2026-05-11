@@ -74,7 +74,10 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - **Real-time:** WebSocket via `web_socket_channel`
 - **Charts:** fl_chart
 - **Routing:** go_router with shell navigation
+- **SVG:** flutter_svg for Spotify brand assets
 - **Design:** Custom dark theme, Lyre Gold (#D4A843) accents, Cinzel headings, Inter body text, JetBrains Mono for data
+- **Accessibility:** Semantics widgets, Tooltips, semantic slider formatters, WCAG AA contrast compliance
+- **Branding:** Spotify attribution (icon + text) on all metadata screens per Developer Terms
 
 ---
 
@@ -95,6 +98,16 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - **Coherence Analysis:** Evaluates queue coherence against the intelligence pipeline state for graceful startup decisions
 - **Natural Language Requests:** Process requests like "play something energetic" via LLM-guided library search
 - **Weighted Random:** Top 3 candidates selected probabilistically by inverse distance (avoids always picking the same "best" track)
+
+### Genre & Artist Lock
+- Interactive lock chips in the flow indicator — tap to pin playback to the current genre or artist
+- Genre chip shows the current dominant genre (e.g., "ELECTRONIC"), artist chip shows the current artist
+- Locked state: gold border + closed lock icon; unlocked: muted border + open lock icon
+- Genre lock uses the `targetGenre` mechanism (hard override in scorer and candidate pool)
+- Artist lock uses a new `targetArtist` mechanism with scoring multiplier and candidate pre-filtering
+- AI prompt integration: phrases like "only play kpop" or "just Daft Punk" auto-activate the corresponding lock
+- Genre Openness slider auto-disables when genre is locked
+- All locks clear automatically when the session ends
 
 ### Feedback & Learning
 - Like/dislike buttons with immediate preference score adjustment
@@ -183,6 +196,12 @@ All routes are prefixed with `/api`.
 | Playback | `/playback/request` | POST | Natural language music request |
 | Steering | `/steering` | GET | Current steering values |
 | Steering | `/steering` | PUT | Update steering controls |
+| Steering | `/steering/target-genre` | GET | Get genre lock state |
+| Steering | `/steering/target-genre` | PUT | Lock to a genre |
+| Steering | `/steering/target-genre` | DELETE | Clear genre lock |
+| Steering | `/steering/target-artist` | GET | Get artist lock state |
+| Steering | `/steering/target-artist` | PUT | Lock to an artist |
+| Steering | `/steering/target-artist` | DELETE | Clear artist lock |
 | Feedback | `/feedback/like` | POST | Like current track |
 | Feedback | `/feedback/dislike` | POST | Dislike current track |
 | Sessions | `/sessions` | GET | Paginated session history |
@@ -308,6 +327,7 @@ Music/
         orpheus_app_bar.dart  # Branded app bar
         session_timeline.dart # Horizontal energy curve chart
         stat_card.dart        # Metric card with sparkline
+        spotify_attribution.dart # Spotify branding attribution widget
         steering_slider.dart  # Steering control slider
       main.dart               # Flutter app entry point
     pubspec.yaml              # Flutter dependencies

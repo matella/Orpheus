@@ -19,6 +19,7 @@ export interface TrackRow {
   mode: number | null;
   time_signature: number | null;
   genre_cluster: string | null;
+  genre_source: string | null;
   aggressiveness: number | null;
   familiarity_score: number;
   source: string;

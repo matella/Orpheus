@@ -25,6 +25,7 @@ class FeedbackButtons extends StatelessWidget {
           activeColor: OrpheusColors.wineRed,
           size: 44,
           onTap: onDislike,
+          semanticLabel: 'Dislike this track',
         ),
 
         // Skip forward (only shown if callback provided)
@@ -36,6 +37,7 @@ class FeedbackButtons extends StatelessWidget {
             activeColor: OrpheusColors.ivory,
             size: 56,
             onTap: onSkip,
+            semanticLabel: 'Skip to next track',
           ),
         ],
 
@@ -48,6 +50,7 @@ class FeedbackButtons extends StatelessWidget {
           activeColor: OrpheusColors.lyreGold,
           size: 44,
           onTap: onLike,
+          semanticLabel: 'Like this track',
         ),
       ],
     );
@@ -60,12 +63,14 @@ class _FeedbackButton extends StatefulWidget {
   final Color activeColor;
   final double size;
   final VoidCallback? onTap;
+  final String semanticLabel;
 
   const _FeedbackButton({
     required this.icon,
     required this.color,
     required this.activeColor,
     required this.size,
+    required this.semanticLabel,
     this.onTap,
   });
 
@@ -105,25 +110,38 @@ class _FeedbackButtonState extends State<_FeedbackButton>
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnimation,
-      child: GestureDetector(
-        onTap: _handleTap,
-        child: Container(
-          width: widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: OrpheusColors.onyx,
-            border: Border.all(
-              color: widget.color.withValues(alpha: 0.3),
-              width: 1.5,
+    final isEnabled = widget.onTap != null;
+
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      enabled: isEnabled,
+      child: Tooltip(
+        message: widget.semanticLabel,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: GestureDetector(
+            onTap: isEnabled ? _handleTap : null,
+            child: Opacity(
+              opacity: isEnabled ? 1.0 : 0.4,
+              child: Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OrpheusColors.onyx,
+                  border: Border.all(
+                    color: widget.color.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(
+                  widget.icon,
+                  color: widget.color,
+                  size: widget.size * 0.45,
+                ),
+              ),
             ),
-          ),
-          child: Icon(
-            widget.icon,
-            color: widget.color,
-            size: widget.size * 0.45,
           ),
         ),
       ),

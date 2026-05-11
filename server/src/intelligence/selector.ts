@@ -23,6 +23,7 @@ class IntelligenceSelector {
   private sessionSkipCount: number = 0;
   private sessionTrackCount: number = 0;
   private targetGenre: string | null = null;
+  private targetArtist: string | null = null;
 
   /**
    * Set or clear a session-scoped target genre.
@@ -38,6 +39,19 @@ class IntelligenceSelector {
   }
 
   /**
+   * Set or clear a session-scoped target artist.
+   * When set, the scorer strongly favors tracks by this artist.
+   */
+  setTargetArtist(artist: string | null): void {
+    this.targetArtist = artist;
+    logger.info({ targetArtist: artist }, 'Target artist set for session');
+  }
+
+  getTargetArtist(): string | null {
+    return this.targetArtist;
+  }
+
+  /**
    * Start tracking a new session.
    * @param skipStateInit When true, skip the default state vector initialization.
    *   Use this when the caller will seed the state vector separately
@@ -49,6 +63,7 @@ class IntelligenceSelector {
     this.sessionSkipCount = 0;
     this.sessionTrackCount = 0;
     this.targetGenre = null;
+    this.targetArtist = null;
     if (!skipStateInit) {
       stateVectorManager.initSession(sessionId);
     }
@@ -66,6 +81,7 @@ class IntelligenceSelector {
     this.sessionSkipCount = 0;
     this.sessionTrackCount = 0;
     this.targetGenre = null;
+    this.targetArtist = null;
     logger.info({ sessionId }, 'Intelligence selector session ended');
   }
 
@@ -98,6 +114,7 @@ class IntelligenceSelector {
       sessionSkipCount: this.sessionSkipCount,
       sessionTrackCount: this.sessionTrackCount,
       targetGenre: this.targetGenre,
+      targetArtist: this.targetArtist,
     };
 
     // 4. Get candidates

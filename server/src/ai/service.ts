@@ -43,10 +43,13 @@ import {
   type ContextInferenceInput,
   type PlaylistPromptParsed,
   type PlaylistNameSuggestion,
+  type GenreInferenceInput,
+  type GenreInferenceResult,
   buildPlaylistPromptParsePrompt,
   buildPlaylistNamePrompt,
+  buildGenreInferencePrompt,
 } from './prompts.js';
-import { buildSystemPrompt } from './knowledge.js';
+import { buildSystemPrompt, getGenreAliases } from './knowledge.js';
 
 // ── In-Memory Cache ────────────────────────────────────────────────
 
@@ -686,6 +689,57 @@ export async function generatePlaylistName(context: {
     };
   } catch (err) {
     logger.warn({ err }, 'AI playlist name generation failed');
+    return null;
+  }
+}
+
+// ── Genre Inference ──────────────────────────────────────────
+
+/**
+ * Infer genres for a batch of tracks using AI.
+ * Returns validated results with genres normalized to canonical names from genre_aliases.json.
+ * Returns null if AI is unavailable or inference fails entirely.
+ */
+export async function inferTrackGenres(
+  tracks: GenreInferenceInput['tracks'],
+): Promise<GenreInferenceResult | null> {
+  if (!isAiEnabled()) return null;
+
+  try {
+    const prompt = buildGenreInferencePrompt({ tracks });
+    const system = buildSystemPrompt('light');
+    const result = await generateJson<GenreInferenceResult>(prompt, {
+      timeout: 30000,
+      system,
+    });
+
+    if (!result?.tracks || !Array.isArray(result.tracks)) return null;
+
+    // Build set of valid canonical genre names for validation
+    const aliases = getGenreAliases();
+    const validGenres = aliases ? new Set(Object.keys(aliases)) : null;
+
+    // Validate and normalize each result
+    result.tracks = result.tracks
+      .filter((t) => typeof t.id === 'number')
+      .map((t) => {
+        const genreLower = typeof t.genre === 'string' ? t.genre.trim().toLowerCase() : null;
+        // Only accept genres that exist in our canonical genre list
+        const isValid = genreLower && (!validGenres || validGenres.has(genreLower));
+        return {
+          id: t.id,
+          genre: isValid ? genreLower : null,
+          confidence: typeof t.confidence === 'number' ? Math.max(0, Math.min(1, t.confidence)) : 0,
+        };
+      });
+
+    logger.info(
+      { trackCount: tracks.length, validResults: result.tracks.filter((t) => t.genre).length },
+      'AI genre inference batch complete',
+    );
+    return result;
+  } catch (err) {
+    logger.warn({ err }, 'AI genre inference failed');
     return null;
   }
 }

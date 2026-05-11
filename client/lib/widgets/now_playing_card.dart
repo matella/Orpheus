@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../config/theme.dart';
+import 'spotify_attribution.dart';
 
 class NowPlayingCard extends StatelessWidget {
   final String trackName;
@@ -43,7 +44,10 @@ class NowPlayingCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Album art
-          ClipRRect(
+          Semantics(
+            image: true,
+            label: 'Album artwork for $trackName by $artistName',
+            child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
             child: AspectRatio(
               aspectRatio: 1,
@@ -65,6 +69,7 @@ class NowPlayingCard extends StatelessWidget {
                     )
                   : _albumArtPlaceholder(),
             ),
+          ),
           ),
 
           // Track info
@@ -99,6 +104,11 @@ class NowPlayingCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+                const SizedBox(height: 10),
+                const SpotifyAttribution(
+                  style: SpotifyAttributionStyle.full,
+                  alignment: MainAxisAlignment.start,
+                ),
               ],
             ),
           ),

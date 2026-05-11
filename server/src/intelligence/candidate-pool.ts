@@ -25,17 +25,27 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
   const recentIdSet = new Set(context.recentTrackIds);
 
   // Only the first N recent artists count for the same-artist exclusion
+  // Normalize to lowercase for consistent matching
   const recentArtistSet = new Set(
-    context.recentArtists.slice(0, SAME_ARTIST_LOOKBACK),
+    context.recentArtists.slice(0, SAME_ARTIST_LOOKBACK).map((a) => a.toLowerCase()),
   );
+
+  // When artist is locked, bypass same-artist exclusion for the target artist
+  const targetArtist = context.targetArtist;
+  const targetArtistLower = targetArtist?.toLowerCase() ?? null;
 
   // Base filter: exclusion + feature completeness
   const baseCandidates = allTracks.filter((track) => {
     // Exclude recently played
     if (recentIdSet.has(track.id)) return false;
 
-    // Exclude same-artist within lookback
-    if (recentArtistSet.has(track.artist)) return false;
+    // Exclude same-artist within lookback (but exempt locked artist)
+    const trackArtistLower = track.artist.toLowerCase();
+    if (recentArtistSet.has(trackArtistLower)) {
+      if (!targetArtistLower || trackArtistLower !== targetArtistLower) {
+        return false;
+      }
+    }
 
     // Must have the core audio features
     if (track.energy === null || track.valence === null || track.tempo === null) {
@@ -67,13 +77,35 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
       return bpmDelta <= bpmThreshold && energyDelta <= energyThreshold;
     });
 
+  // ---- Artist-aware pre-filter ----
+  // When artist is locked, prefer tracks by that artist before genre filtering.
+  let artistFilteredBase = baseCandidates;
+  if (targetArtistLower) {
+    const sameArtist = baseCandidates.filter(
+      (t) => t.artist.toLowerCase() === targetArtistLower,
+    );
+    if (sameArtist.length >= 5) {
+      // Enough same-artist tracks — use them as the base for genre filtering
+      artistFilteredBase = sameArtist;
+      logger.debug(
+        { targetArtist, count: sameArtist.length },
+        'Artist lock: using same-artist candidates as base',
+      );
+    } else {
+      logger.debug(
+        { targetArtist, count: sameArtist.length },
+        'Artist lock: not enough same-artist tracks, will score artist match instead',
+      );
+    }
+  }
+
   // ---- Genre-aware tiered filtering ----
   // When the session has a dominant genre (or an explicit target genre),
   // prefer same-genre candidates before falling back to cross-genre.
   const referenceGenre = context.targetGenre || context.stateVector.genreCluster;
 
   const sameGenre = referenceGenre
-    ? baseCandidates.filter((t) => t.genre_cluster === referenceGenre)
+    ? artistFilteredBase.filter((t) => t.genre_cluster === referenceGenre)
     : [];
 
   // Try strict proximity within same-genre first
@@ -92,23 +124,37 @@ export function getCandidates(context: ScoringContext): TrackRow[] {
   }
 
   if (candidates.length < 10) {
-    // Fall back: all genres, strict proximity
+    // Fall back: artist-filtered base (if applicable), all genres, strict proximity
     logger.debug(
       { sameGenre: sameGenre.length, genreLocked: candidates.length, referenceGenre },
       'Not enough same-genre candidates, falling back to all genres',
     );
     candidates = applyProximity(
-      baseCandidates,
+      artistFilteredBase,
       BPM_PROXIMITY_THRESHOLD,
       ENERGY_PROXIMITY_THRESHOLD,
     );
   }
 
   if (candidates.length < 10) {
-    // Relax: double both thresholds, all genres
+    // Relax: double both thresholds, artist-filtered base
+    candidates = applyProximity(
+      artistFilteredBase,
+      BPM_PROXIMITY_THRESHOLD * 2,
+      ENERGY_PROXIMITY_THRESHOLD * 2,
+    );
+  }
+
+  if (candidates.length < 10) {
+    // Drop proximity, keep artist filter if applicable
+    candidates = artistFilteredBase;
+  }
+
+  if (candidates.length < 10 && artistFilteredBase !== baseCandidates) {
+    // Artist lock yielded too few — fall back to full library
     logger.debug(
-      { strict: candidates.length },
-      'Candidate pool too small, relaxing proximity thresholds',
+      { artistFiltered: artistFilteredBase.length },
+      'Artist-filtered pool too small, falling back to full library',
     );
     candidates = applyProximity(
       baseCandidates,

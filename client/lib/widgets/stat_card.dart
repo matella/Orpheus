@@ -24,7 +24,9 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      label: '$title: $value${subtitle != null ? ', $subtitle' : ''}',
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: OrpheusColors.onyx,
@@ -109,6 +111,7 @@ class StatCard extends StatelessWidget {
           ],
         ],
       ),
+    ),
     );
   }
 }
