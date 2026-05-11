@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 8;
 
 /**
  * Run all database migrations.
@@ -36,6 +36,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 7) {
     migrateV7(db);
+  }
+
+  if (version < 8) {
+    migrateV8(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -402,4 +406,15 @@ function migrateV7(db: DatabaseSync): void {
 
   setSchemaVersion(db, 7);
   logger.info('Migration v7 complete');
+}
+
+function migrateV8(db: DatabaseSync): void {
+  logger.info('Running migration v8: TTS settings');
+
+  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_enabled INTEGER NOT NULL DEFAULT 0`).run();
+  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_voice TEXT`).run();
+  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_duck_volume REAL NOT NULL DEFAULT 0.3`).run();
+
+  setSchemaVersion(db, 8);
+  logger.info('Migration v8 complete');
 }
