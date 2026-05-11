@@ -48,7 +48,11 @@ export class PiperAdapter implements TtsAdapter {
       });
 
       const chunks: Buffer[] = [];
+      let settled = false;
+
       const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
         proc.kill();
         reject(new AiError('Piper TTS timed out'));
       }, SPEAK_TIMEOUT_MS);
@@ -60,6 +64,8 @@ export class PiperAdapter implements TtsAdapter {
 
       proc.on('close', (code) => {
         clearTimeout(timer);
+        if (settled) return;
+        settled = true;
         if (code !== 0) {
           reject(new AiError(`Piper exited with code ${code}`));
         } else {
@@ -69,6 +75,8 @@ export class PiperAdapter implements TtsAdapter {
 
       proc.on('error', (err) => {
         clearTimeout(timer);
+        if (settled) return;
+        settled = true;
         reject(new AiError(`Failed to spawn Piper: ${err.message}`));
       });
 

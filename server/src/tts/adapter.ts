@@ -4,7 +4,7 @@ export interface Voice {
 }
 
 export interface TtsAdapter {
-  speak(text: string): Promise<Buffer>;
+  speak(text: string, voiceId?: string | null): Promise<Buffer>;
   listVoices(): Promise<Voice[]>;
   isAvailable(): boolean;
 }
