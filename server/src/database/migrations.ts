@@ -411,9 +411,17 @@ function migrateV7(db: DatabaseSync): void {
 function migrateV8(db: DatabaseSync): void {
   logger.info('Running migration v8: TTS settings');
 
-  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_enabled INTEGER NOT NULL DEFAULT 0`).run();
-  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_voice TEXT`).run();
-  db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_duck_volume REAL NOT NULL DEFAULT 0.3`).run();
+  const columns = db.prepare('PRAGMA table_info(dj_preferences)').all() as { name: string }[];
+
+  if (!columns.some((c) => c.name === 'tts_enabled')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_enabled INTEGER NOT NULL DEFAULT 0`).run();
+  }
+  if (!columns.some((c) => c.name === 'tts_voice')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_voice TEXT`).run();
+  }
+  if (!columns.some((c) => c.name === 'tts_duck_volume')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_duck_volume REAL NOT NULL DEFAULT 0.3`).run();
+  }
 
   setSchemaVersion(db, 8);
   logger.info('Migration v8 complete');
