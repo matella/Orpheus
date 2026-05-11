@@ -448,6 +448,43 @@ Respond with ONLY this JSON format:
 }`;
 }
 
+// ── Genre Inference ──────────────────────────────────────────
+
+export interface GenreInferenceInput {
+  tracks: { id: number; name: string; artist: string; album: string | null }[];
+}
+
+export interface GenreInferenceResult {
+  tracks: { id: number; genre: string | null; confidence: number }[];
+}
+
+export function buildGenreInferencePrompt(input: GenreInferenceInput): string {
+  const trackLines = input.tracks
+    .map((t) => `  - ID ${t.id}: "${t.name}" by ${t.artist}${t.album ? ` (album: ${t.album})` : ''}`)
+    .join('\n');
+
+  return `Classify the primary genre of each track below. Use ONLY the canonical genre names from the GENRE NORMALIZATION section in your system prompt. If you are not confident about a track's genre, set confidence below 0.5.
+
+TRACKS:
+${trackLines}
+
+For each track, determine the single most likely primary genre based on the artist name, track title, and album context. Use your knowledge of music artists, their catalogues, and sonic signatures.
+
+Rules:
+- Use ONLY canonical genre names (the left-side keys from GENRE NORMALIZATION). Do not invent new genre names.
+- If an artist spans multiple genres, pick the one most likely for this specific track/album.
+- Set confidence 0.7-1.0 for well-known artists with clear genre identity.
+- Set confidence 0.4-0.6 for lesser-known artists or ambiguous cases.
+- Set confidence below 0.3 if you truly don't know.
+
+Respond with ONLY this JSON format:
+{
+  "tracks": [
+    { "id": <track_id>, "genre": "<canonical_genre>", "confidence": 0.85 }
+  ]
+}`;
+}
+
 export function buildContextInferencePrompt(ctx: ContextInferenceInput): string {
   const learnedSection = ctx.learnedPrefs
     ? `LEARNED PREFERENCES for ${ctx.timeBracket} (from ${ctx.learnedPrefs.sampleCount} sessions):

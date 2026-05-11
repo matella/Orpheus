@@ -211,7 +211,6 @@ const OUTPUT_FORMAT_INSTRUCTIONS = `CRITICAL OUTPUT RULES:
 function buildGenreAliasSection(): string {
   if (!genreAliases) return '';
   const lines = Object.entries(genreAliases)
-    .slice(0, 30)
     .map(([canon, aliases]) => `  ${canon}: ${aliases.slice(0, 3).join(', ')}`)
     .join('\n');
   return `GENRE NORMALIZATION:

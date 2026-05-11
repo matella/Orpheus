@@ -6,6 +6,7 @@ import { registerLibrarySyncTasks } from './scheduler/tasks/sync-library.js';
 import { registerPlayerPollTask } from './scheduler/tasks/poll-player.js';
 import { registerAnalyticsComputeTask } from './scheduler/tasks/compute-analytics.js';
 import { registerMonthlyRecapTask } from './scheduler/tasks/monthly-recap.js';
+import { registerMetadataInferenceTask } from './scheduler/tasks/infer-metadata.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { engine } from './playback/engine.js';
 import { loadKnowledgeFiles } from './ai/knowledge.js';
@@ -30,6 +31,7 @@ async function main() {
   registerPlayerPollTask();
   registerAnalyticsComputeTask();
   registerMonthlyRecapTask();
+  registerMetadataInferenceTask();
   startScheduler();
 
   logger.info('Orpheus is ready');

@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../providers/session_provider.dart';
 import '../widgets/energy_arc.dart';
 import '../widgets/session_timeline.dart';
+import '../widgets/spotify_attribution.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
   const SessionScreen({super.key});
@@ -162,6 +163,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         const SizedBox(height: 12),
         ...state.activeSessionTracks.reversed.take(20).map<Widget>((track) =>
             _buildTrackTile(context, track)),
+
+        const SizedBox(height: 16),
+        const SpotifyAttribution(style: SpotifyAttributionStyle.full),
       ],
     );
   }
@@ -254,7 +258,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     'SKIP',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9,
-                      color: OrpheusColors.wineRed,
+                      color: OrpheusColors.wineRedText,
                       fontWeight: FontWeight.w600,
                     ),
                   )

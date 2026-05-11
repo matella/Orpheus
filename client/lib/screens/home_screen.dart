@@ -57,6 +57,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   double? _coherenceScore;
   List<Map<String, dynamic>> _flowTrajectory = [];
 
+  // Genre & artist lock
+  String? _currentGenre;
+  String? _currentArtist;
+  String? _lockedGenre;
+  String? _lockedArtist;
+
   // Error
   String? _errorMessage;
   String? _errorCode;
@@ -107,6 +113,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _artistName = track['artist'] ?? '';
       _albumName = track['album'] ?? '';
       _albumArtUrl = track['albumArtUrl'];
+      _currentGenre = track['genreCluster'] as String?;
+      _currentArtist = track['artist'] as String?;
     }
   }
 
@@ -157,11 +165,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _deviceName = state['deviceName'];
               _transitionMode = state['transitionMode'] ?? 'none';
               _adoptedTrackCount = state['adoptedTrackCount'] ?? 0;
-              _coherenceScore =
-                  (state['coherenceScore'] as num?)?.toDouble();
+              _coherenceScore = (state['coherenceScore'] as num?)?.toDouble();
+              _lockedGenre = state['targetGenre'] as String?;
+              _lockedArtist = state['targetArtist'] as String?;
             }
             if (data.containsKey('current')) {
               _applyTrack(data['current']);
+            }
+            // Use session's dominant genre (from state vector) as primary source,
+            // falls back to individual track genreCluster
+            final eventGenre = data['currentGenre'] as String?;
+            if (eventGenre != null) {
+              _currentGenre = eventGenre;
             }
             if (data.containsKey('trajectory')) {
               _flowTrajectory = List<Map<String, dynamic>>.from(
@@ -196,6 +211,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _adoptedTrackCount = 0;
             _coherenceScore = null;
             _flowTrajectory = [];
+            _currentGenre = null;
+            _currentArtist = null;
+            _lockedGenre = null;
+            _lockedArtist = null;
           });
         case 'transition_complete':
           setState(() {
@@ -211,8 +230,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (injected != null && injected > 0 && prompt != null) {
             setState(() {
               _promptResult = 'Queued $injected tracks for "$prompt"';
+              // Update lock chips if prompt triggered a lock
+              final gl = data['genreLocked'] as String?;
+              final al = data['artistLocked'] as String?;
+              if (gl != null) _lockedGenre = gl;
+              if (al != null) _lockedArtist = al;
             });
           }
+        case 'genre_lock_changed':
+          setState(() {
+            _lockedGenre = data['genre'] as String?;
+          });
+        case 'artist_lock_changed':
+          setState(() {
+            _lockedArtist = data['artist'] as String?;
+          });
       }
     });
   }
@@ -269,13 +301,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       setState(() {
         _isSyncing = false;
         if (withFeatures > 0) {
-          _errorMessage = 'Library synced: $total tracks ($withFeatures ready). Try starting the engine now.';
+          _errorMessage =
+              'Library synced: $total tracks ($withFeatures ready). Try starting the engine now.';
           _errorCode = 'SYNC_SUCCESS';
         } else if (total > 0) {
-          _errorMessage = 'Found $total tracks but audio features not yet ready. Try syncing again.';
+          _errorMessage =
+              'Found $total tracks but audio features not yet ready. Try syncing again.';
           _errorCode = 'EMPTY_LIBRARY';
         } else {
-          _errorMessage = 'No tracks found. Make sure you have saved tracks on Spotify.';
+          _errorMessage =
+              'No tracks found. Make sure you have saved tracks on Spotify.';
           _errorCode = 'EMPTY_LIBRARY';
         }
       });
@@ -365,10 +400,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       setState(() {
         _isPromptProcessing = false;
         if (injected > 0) {
-          final names = tracks
-              .take(3)
-              .map((t) => t['name'] as String? ?? '')
-              .join(', ');
+          final names =
+              tracks.take(3).map((t) => t['name'] as String? ?? '').join(', ');
           _promptResult =
               'Queued $injected tracks: $names${tracks.length > 3 ? '...' : ''}';
         } else {
@@ -386,6 +419,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _toggleGenreLock() async {
+    if (_lockedGenre != null) {
+      final prev = _lockedGenre;
+      setState(() => _lockedGenre = null);
+      try {
+        await apiService.clearTargetGenre();
+      } catch (_) {
+        if (mounted) setState(() => _lockedGenre = prev);
+      }
+    } else {
+      final genre = _currentGenre;
+      if (genre == null || genre.isEmpty) return;
+      setState(() => _lockedGenre = genre);
+      try {
+        await apiService.setTargetGenre(genre);
+      } catch (_) {
+        if (mounted) setState(() => _lockedGenre = null);
+      }
+    }
+  }
+
+  Future<void> _toggleArtistLock() async {
+    if (_lockedArtist != null) {
+      final prev = _lockedArtist;
+      setState(() => _lockedArtist = null);
+      try {
+        await apiService.clearTargetArtist();
+      } catch (_) {
+        if (mounted) setState(() => _lockedArtist = prev);
+      }
+    } else {
+      final artist = _currentArtist;
+      if (artist == null || artist.isEmpty) return;
+      setState(() => _lockedArtist = artist);
+      try {
+        await apiService.setTargetArtist(artist);
+      } catch (_) {
+        if (mounted) setState(() => _lockedArtist = null);
+      }
+    }
+  }
+
   bool get _isEngineRunning =>
       _engineStatus == 'running' || _engineStatus == 'paused';
 
@@ -399,6 +474,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(title: const Text('ORPHEUS')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/playlist'),
+        tooltip: 'Create a new playlist',
         icon: const Icon(Icons.queue_music_rounded),
         label: Text(
           'PLAYLIST',
@@ -497,6 +573,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Previous
         IconButton(
           onPressed: _onPrevious,
+          tooltip: 'Previous track',
           icon: const Icon(Icons.skip_previous_rounded),
           iconSize: 32,
           color: OrpheusColors.ivory,
@@ -514,6 +591,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Play / Pause (larger)
         IconButton(
           onPressed: _togglePlayPause,
+          tooltip: _isPlaying ? 'Pause' : 'Play',
           icon: Icon(
             _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
           ),
@@ -531,6 +609,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Next
         IconButton(
           onPressed: _onSkip,
+          tooltip: 'Next track',
           icon: const Icon(Icons.skip_next_rounded),
           iconSize: 32,
           color: OrpheusColors.ivory,
@@ -685,7 +764,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           Text(
             _errorMessage!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            style:
+                Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
             textAlign: TextAlign.center,
           ),
           if (showSyncButton) ...[
@@ -852,6 +932,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     )
                   : IconButton(
                       onPressed: _sendPrompt,
+                      tooltip: 'Send music request',
                       icon: const Icon(Icons.send_rounded, size: 20),
                       color: OrpheusColors.lyreGold,
                       padding: EdgeInsets.zero,
@@ -870,6 +951,115 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLockChip({
+    required String? current,
+    required String? locked,
+    required bool isGenre,
+    required VoidCallback onTap,
+  }) {
+    final displayValue = locked ?? current;
+    if (displayValue == null || displayValue.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final isLocked = locked != null;
+    final label = isGenre ? displayValue.toUpperCase() : displayValue;
+
+    return Semantics(
+      button: true,
+      label: isLocked
+          ? '${isGenre ? "Genre" : "Artist"} locked to $displayValue. Tap to unlock.'
+          : 'Current ${isGenre ? "genre" : "artist"}: $displayValue. Tap to lock.',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isLocked
+                ? OrpheusColors.deepGold.withValues(alpha: 0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isLocked ? OrpheusColors.lyreGold : OrpheusColors.slate,
+              width: isLocked ? 1.5 : 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isGenre ? Icons.music_note_rounded : Icons.person_rounded,
+                size: 12,
+                color: isLocked ? OrpheusColors.lyreGold : OrpheusColors.mist,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: isGenre
+                    ? GoogleFonts.cinzel(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: isLocked
+                            ? OrpheusColors.lyreGold
+                            : OrpheusColors.mist,
+                        letterSpacing: 2,
+                      )
+                    : GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: isLocked
+                            ? OrpheusColors.lyreGold
+                            : OrpheusColors.mist,
+                      ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                size: 12,
+                color: isLocked ? OrpheusColors.lyreGold : OrpheusColors.mist,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLockChips() {
+    final genreChip = _buildLockChip(
+      current: _currentGenre,
+      locked: _lockedGenre,
+      isGenre: true,
+      onTap: _toggleGenreLock,
+    );
+    final artistChip = _buildLockChip(
+      current: _currentArtist,
+      locked: _lockedArtist,
+      isGenre: false,
+      onTap: _toggleArtistLock,
+    );
+
+    final hasGenre = (_lockedGenre ?? _currentGenre) != null;
+    final hasArtist = (_lockedArtist ?? _currentArtist) != null;
+
+    if (!hasGenre && !hasArtist) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        alignment: WrapAlignment.center,
+        children: [
+          genreChip,
+          artistChip,
         ],
       ),
     );
@@ -914,6 +1104,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
           const SizedBox(height: 10),
+          // Genre & artist lock chips
+          _buildLockChips(),
           // Combined bars + curve
           SizedBox(
             height: 40,
@@ -1004,8 +1196,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             }),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1037,8 +1228,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
 
           // Error message (when expanded and sync failed)
-          if (_steeringExpanded &&
-              syncStatus == SteeringSyncStatus.error)
+          if (_steeringExpanded && syncStatus == SteeringSyncStatus.error)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
@@ -1056,15 +1246,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 children: [
                   for (final (key, label, left, right) in _sliderConfig) ...[
-                    SteeringSlider(
-                      label: label,
-                      leftLabel: left,
-                      rightLabel: right,
-                      value: steering[key] ?? 0.5,
-                      onChanged: (v) => ref
-                          .read(steeringProvider.notifier)
-                          .updateControl(key, v),
-                    ),
+                    if (key == 'genreOpenness' && _lockedGenre != null)
+                      Opacity(
+                        opacity: 0.4,
+                        child: SteeringSlider(
+                          label: '$label (locked)',
+                          leftLabel: left,
+                          rightLabel: right,
+                          value: 0.0,
+                          onChanged: null,
+                        ),
+                      )
+                    else
+                      SteeringSlider(
+                        label: label,
+                        leftLabel: left,
+                        rightLabel: right,
+                        value: steering[key] ?? 0.5,
+                        onChanged: (v) => ref
+                            .read(steeringProvider.notifier)
+                            .updateControl(key, v),
+                      ),
                     const SizedBox(height: 12),
                   ],
                 ],
@@ -1186,8 +1388,8 @@ class _FlowCurvePainter extends CustomPainter {
     }
 
     // Create gradient shader
-    final adoptedColor = const Color(0xFF8A8A99); // mist
-    final orpheusColor = const Color(0xFFD4A843); // lyreGold
+    const adoptedColor = Color(0xFF8A8A99); // mist
+    const orpheusColor = Color(0xFFD4A843); // lyreGold
 
     final Paint curvePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -1225,7 +1427,8 @@ class _FlowCurvePainter extends CustomPainter {
     for (int i = 0; i < points.length; i++) {
       final adopted = trajectory[i]['adopted'] as bool? ?? false;
       final dotColor = adopted ? adoptedColor : orpheusColor;
-      final dotPaint = Paint()..color = dotColor.withValues(alpha: i == 0 ? 1.0 : 0.7);
+      final dotPaint = Paint()
+        ..color = dotColor.withValues(alpha: i == 0 ? 1.0 : 0.7);
       canvas.drawCircle(points[i], i == 0 ? 3.5 : 2.5, dotPaint);
     }
   }
@@ -1239,7 +1442,8 @@ class _FlowCurvePainter extends CustomPainter {
 bool _listsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
   if (a.length != b.length) return false;
   for (int i = 0; i < a.length; i++) {
-    if (a[i]['energy'] != b[i]['energy'] || a[i]['adopted'] != b[i]['adopted']) {
+    if (a[i]['energy'] != b[i]['energy'] ||
+        a[i]['adopted'] != b[i]['adopted']) {
       return false;
     }
   }

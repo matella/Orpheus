@@ -34,6 +34,8 @@ export interface EngineState {
   transitionMode: 'none' | 'observing' | 'autonomous';
   adoptedTrackCount: number;
   coherenceScore: number | null;
+  targetGenre: string | null;
+  targetArtist: string | null;
 }
 
 /**

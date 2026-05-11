@@ -241,6 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               max: 60,
               divisions: 12,
               label: '${_autoStartDelay.round()}s',
+              semanticFormatterCallback: (v) => '${v.round()} seconds delay',
               onChanged: _autoStartEnabled
                   ? (value) {
                       setState(() => _autoStartDelay = value);
@@ -368,6 +369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               max: 20,
               divisions: 18,
               label: '${_aiAnalysisInterval.round()} tracks',
+              semanticFormatterCallback: (v) => 'Every ${v.round()} tracks',
               onChanged: _aiEnabled
                   ? (value) {
                       setState(() => _aiAnalysisInterval = value);

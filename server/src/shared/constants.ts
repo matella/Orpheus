@@ -77,3 +77,8 @@ export const AI_WEIGHT_MULTIPLIER_MIN = 0.5; // Floor for AI weight multipliers
 export const AI_WEIGHT_MULTIPLIER_MAX = 2.0; // Ceiling for AI weight multipliers
 export const AI_MAX_CONTEXT_HISTORY = 20; // Max state history entries in prompt
 export const AI_INSIGHT_MIN_TRACKS = 3; // Min tracks before generating insight
+
+// AI genre inference
+export const AI_GENRE_INFERENCE_BATCH_SIZE = 10; // Tracks per AI call
+export const AI_GENRE_INFERENCE_MAX_BATCHES = 5;  // Max batches per scheduled run (50 tracks total)
+export const AI_GENRE_INFERENCE_CONFIDENCE_THRESHOLD = 0.5; // Min confidence to accept

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../widgets/stat_card.dart';
+import '../widgets/spotify_attribution.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -95,6 +96,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       _buildListeningHours(context),
                       const SizedBox(height: 32),
                       _buildTopTracks(context),
+                      const SizedBox(height: 20),
+                      const SpotifyAttribution(style: SpotifyAttributionStyle.full),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -220,7 +223,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 value: '${skipRate.round()}%',
                 icon: Icons.skip_next,
                 valueColor: skipRate > 40
-                    ? OrpheusColors.wineRed
+                    ? OrpheusColors.wineRedText
                     : skipRate > 20
                         ? OrpheusColors.amberGlow
                         : OrpheusColors.laurelGreen,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../config/theme.dart';
 import '../services/api_service.dart';
+import '../widgets/spotify_attribution.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -77,15 +79,25 @@ class _AuthScreenState extends State<AuthScreen> {
                             color: OrpheusColors.obsidian,
                           ),
                         )
-                      : const Icon(Icons.login_rounded),
+                      : SvgPicture.asset(
+                          'assets/images/spotify_icon_white.svg',
+                          height: 20,
+                          width: 20,
+                          colorFilter: const ColorFilter.mode(
+                            OrpheusColors.obsidian,
+                            BlendMode.srcIn,
+                          ),
+                        ),
                   label: const Text('Connect to Spotify'),
                 ),
+                const SizedBox(height: 24),
+                const SpotifyAttribution(style: SpotifyAttributionStyle.full),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Text(
                     _error!,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: OrpheusColors.wineRed,
+                          color: OrpheusColors.wineRedText,
                         ),
                     textAlign: TextAlign.center,
                   ),

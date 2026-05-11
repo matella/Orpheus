@@ -29,12 +29,15 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     weights.preference *= 0.6;
     weights.recency *= 2.0; // Boost recency in explore mode — favors unplayed tracks
   }
-  if (steering.genreOpenness < 0.4) {
-    weights.genre *= 1.5;     // Low openness = stronger genre lock
-    weights.transition *= 1.3;
-  }
-  if (steering.genreOpenness > 0.7) {
-    weights.genre *= 0.5;     // High openness = relax genre constraint
+  // Skip genreOpenness weight adjustments when genre is explicitly locked via targetGenre
+  if (!context.targetGenre) {
+    if (steering.genreOpenness < 0.4) {
+      weights.genre *= 1.5;     // Low openness = stronger genre lock
+      weights.transition *= 1.3;
+    }
+    if (steering.genreOpenness > 0.7) {
+      weights.genre *= 0.5;     // High openness = relax genre constraint
+    }
   }
   if (steering.focusVsParty < 0.4) {
     weights.transition *= 1.3;
@@ -154,16 +157,26 @@ export function scoreTrack(track: TrackRow, context: ScoringContext, sessionId?:
     recency = Math.min(daysSince / 30, 1);
   }
 
+  // --- artist lock bonus: strong boost when target artist is set and matches ---
+  let artistMultiplier = 1.0;
+  if (context.targetArtist) {
+    if (track.artist.toLowerCase() === context.targetArtist.toLowerCase()) {
+      artistMultiplier = 1.5; // 50% boost for matching artist
+    } else {
+      artistMultiplier = 0.4; // Heavy penalty for non-matching artist
+    }
+  }
+
   // ---- 4. Weighted sum ----
   const score =
-    weights.stateSimilarity * stateSimilarity +
+    (weights.stateSimilarity * stateSimilarity +
     weights.genre * genre +
     weights.preference * preference +
     weights.transition * transition +
     weights.novelty * novelty +
     weights.fatigue * fatigue +
     weights.context * contextScore +
-    weights.recency * recency;
+    weights.recency * recency) * artistMultiplier;
 
   return score;
 }

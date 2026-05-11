@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 5;
+const CURRENT_VERSION = 6;
 
 /**
  * Run all database migrations.
@@ -28,6 +28,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 5) {
     migrateV5(db);
+  }
+
+  if (version < 6) {
+    migrateV6(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -356,4 +360,20 @@ function migrateV5(db: DatabaseSync): void {
 
   setSchemaVersion(db, 5);
   logger.info('Migration v5 complete');
+}
+
+function migrateV6(db: DatabaseSync): void {
+  logger.info('Running migration v6: AI genre inference tracking');
+
+  const columns = db.prepare('PRAGMA table_info(tracks)').all() as { name: string }[];
+  const hasGenreSource = columns.some((c) => c.name === 'genre_source');
+  if (!hasGenreSource) {
+    db.prepare('ALTER TABLE tracks ADD COLUMN genre_source TEXT').run();
+  }
+
+  // Backfill: existing genre_cluster values came from Spotify artist sync
+  db.prepare("UPDATE tracks SET genre_source = 'spotify' WHERE genre_cluster IS NOT NULL AND genre_source IS NULL").run();
+
+  setSchemaVersion(db, 6);
+  logger.info('Migration v6 complete');
 }

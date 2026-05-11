@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../config/theme.dart';
 import '../providers/playlist_provider.dart';
+import '../widgets/spotify_attribution.dart';
 
 const _energyArcOptions = [
   ('steady', 'Steady', Icons.horizontal_rule_rounded),
@@ -135,6 +137,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   max: 180,
                   divisions: 35,
                   onChanged: (v) => setState(() => _durationMinutes = v),
+                  semanticFormatterCallback: (v) => '${v.round()} minutes',
                 ),
               ),
               SizedBox(
@@ -166,6 +169,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   max: 1,
                   divisions: 10,
                   onChanged: (v) => setState(() => _discoveryRate = v),
+                  semanticFormatterCallback: (v) => '${(v * 100).round()} percent discovery',
                 ),
               ),
               Text('New', style: Theme.of(context).textTheme.bodySmall),
@@ -298,6 +302,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                           min: 0,
                           max: 1,
                           divisions: 10,
+                          semanticFormatterCallback: (v) => '${(v * 100).round()} percent smoothness',
                           onChanged: (v) =>
                               setState(() => _transitionSmoothness = v),
                         ),
@@ -316,6 +321,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         onPressed: _maxPerArtist > 1
                             ? () => setState(() => _maxPerArtist--)
                             : null,
+                        tooltip: 'Decrease max tracks per artist',
                         icon: const Icon(Icons.remove_rounded),
                         iconSize: 20,
                         style: IconButton.styleFrom(
@@ -336,6 +342,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         onPressed: _maxPerArtist < 10
                             ? () => setState(() => _maxPerArtist++)
                             : null,
+                        tooltip: 'Increase max tracks per artist',
                         icon: const Icon(Icons.add_rounded),
                         iconSize: 20,
                         style: IconButton.styleFrom(
@@ -460,7 +467,15 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _openUrl(spotifyUrl),
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    icon: SvgPicture.asset(
+                      'assets/images/spotify_icon_white.svg',
+                      height: 18,
+                      width: 18,
+                      colorFilter: const ColorFilter.mode(
+                        OrpheusColors.obsidian,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                     label: const Text('OPEN IN SPOTIFY'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -491,6 +506,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
 
           for (final track in tracks) _buildTrackTile(track),
 
+          const SizedBox(height: 16),
+          const SpotifyAttribution(style: SpotifyAttributionStyle.full),
           const SizedBox(height: 24),
         ],
       ),
