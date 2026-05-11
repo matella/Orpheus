@@ -10,6 +10,9 @@ export interface DjPreferences {
   chattiness: Chattiness;
   discoveryAppetite: DiscoveryAppetite;
   onboardingCompleted: boolean;
+  ttsEnabled: boolean;
+  ttsVoice: string | null;
+  ttsDuckVolume: number;
 }
 
 interface DjPreferencesRow {
@@ -18,12 +21,15 @@ interface DjPreferencesRow {
   chattiness: string;
   discovery_appetite: string;
   onboarding_completed: number;
+  tts_enabled: number;
+  tts_voice: string | null;
+  tts_duck_volume: number;
 }
 
 export function getDjPreferences(): DjPreferences {
   const db = getDb();
   const row = db
-    .prepare('SELECT persona, custom_persona, chattiness, discovery_appetite, onboarding_completed FROM dj_preferences WHERE id = 1')
+    .prepare('SELECT persona, custom_persona, chattiness, discovery_appetite, onboarding_completed, tts_enabled, tts_voice, tts_duck_volume FROM dj_preferences WHERE id = 1')
     .get() as DjPreferencesRow | undefined;
 
   if (!row) {
@@ -33,6 +39,9 @@ export function getDjPreferences(): DjPreferences {
       chattiness: 'balanced',
       discoveryAppetite: 'comfort',
       onboardingCompleted: false,
+      ttsEnabled: false,
+      ttsVoice: null,
+      ttsDuckVolume: 0.3,
     };
   }
 
@@ -42,6 +51,9 @@ export function getDjPreferences(): DjPreferences {
     chattiness: row.chattiness as Chattiness,
     discoveryAppetite: row.discovery_appetite as DiscoveryAppetite,
     onboardingCompleted: row.onboarding_completed === 1,
+    ttsEnabled: row.tts_enabled === 1,
+    ttsVoice: row.tts_voice,
+    ttsDuckVolume: row.tts_duck_volume,
   };
 }
 
@@ -56,6 +68,9 @@ export function updateDjPreferences(patch: Partial<Omit<DjPreferences, 'onboardi
       custom_persona = ?,
       chattiness = ?,
       discovery_appetite = ?,
+      tts_enabled = ?,
+      tts_voice = ?,
+      tts_duck_volume = ?,
       updated_at = datetime('now')
     WHERE id = 1
   `).run(
@@ -63,6 +78,9 @@ export function updateDjPreferences(patch: Partial<Omit<DjPreferences, 'onboardi
     next.customPersona,
     next.chattiness,
     next.discoveryAppetite,
+    next.ttsEnabled ? 1 : 0,
+    next.ttsVoice,
+    next.ttsDuckVolume,
   );
 
   return next;
