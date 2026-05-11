@@ -24,6 +24,10 @@ class OrpheusColors {
   static const laurelGreen = Color(0xFF4A7C59);
   static const wineRed = Color(0xFF8B3A3A);
 
+  // Accessible text variants (WCAG AA 4.5:1 on obsidian)
+  static const wineRedText = Color(0xFFB04A4A);
+  static const laurelGreenText = Color(0xFF5A9C6A);
+
   // Gradients
   static const goldGradient = LinearGradient(
     colors: [deepGold, lyreGold, amberGlow],

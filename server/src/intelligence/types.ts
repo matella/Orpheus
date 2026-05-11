@@ -42,8 +42,10 @@ export interface ScoringContext {
   recentArtists: string[];
   sessionSkipCount: number;
   sessionTrackCount: number;
-  /** Session-scoped target genre set by music requests (e.g. "more kpop"). */
+  /** Session-scoped target genre set by music requests or genre lock. */
   targetGenre?: string | null;
+  /** Session-scoped target artist set by music requests or artist lock. */
+  targetArtist?: string | null;
 }
 
 /**

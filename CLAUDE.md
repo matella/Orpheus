@@ -56,19 +56,19 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
 - **Playback Engine** (`playback/engine.ts`) — Core loop polling Spotify every 5s. Extends EventEmitter (`track_changed`, `session_started`, `session_ended`, `state_updated`, `transition_complete`). Manages session lifecycle. Supports graceful startup — adopts current Spotify playback and queue when coherent.
 - **Intelligence Pipeline** (`intelligence/`) — The track selection brain:
   - `state-vector.ts` — 8D state (energy, valence, tempo, genre, familiarity, vocalness, aggressiveness, fatigue) updated via EMA (alpha=0.2). Skips null audio features.
-  - `selector.ts` — Orchestrator: state → steering blend → candidate pool → score → weighted random pick from top 3
-  - `scorer.ts` — 8-dimension scoring: stateSimilarity(20%), genre(15%), preference(15%), transition(15%), novelty(10%), fatigue(10%), context(10%), recency(5%)
+  - `selector.ts` — Orchestrator: state → steering blend → candidate pool → score → weighted random pick from top 3. Manages `targetGenre` and `targetArtist` locks (session-scoped, cleared on session end)
+  - `scorer.ts` — 8-dimension scoring: stateSimilarity(20%), genre(15%), preference(15%), transition(15%), novelty(10%), fatigue(10%), context(10%), recency(5%). Artist lock applies 1.5x/0.4x multiplier on final score
   - `steering.ts` — 7-axis user controls blended 40% into target state
-  - `candidate-pool.ts` — Filters library by energy/genre/tempo proximity, excludes recent tracks/artists
+  - `candidate-pool.ts` — Filters library by energy/genre/tempo proximity, excludes recent tracks/artists. Artist lock pre-filters to same-artist candidates when available
   - `feedback.ts` — Like/dislike/skip → preference score adjustments
   - `context-learning.ts` — Learns time-of-day patterns across sessions
   - `coherence.ts` — Queue coherence analysis for graceful startup
   - `request-handler.ts` — Natural language music request processing
   - `playlist-generator.ts` — AI-enhanced playlist generation: prompt parsing → candidate pool → per-segment scoring → transition ordering → Spotify export
 - **Spotify** (`spotify/`) — PKCE OAuth, SDK wrapper, library sync, player control
-- **AI** (`ai/`) — Ollama client with structured JSON prompts and three-level system prompt architecture (`full`/`light`/`minimal`). Knowledge module (`knowledge.ts`) loads genre aliases and mood mappings from `data/` at startup, gathers RAG context from DB per-call, and builds modular system prompts. Functions: session naming, recaps, monthly recaps, context inference, weight suggestions, playlist prompt parsing, playlist naming. All fire-and-forget; never blocks playback.
-- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, 5 migration versions. 13 repository classes for data access. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
-- **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), player poll (5s), analytics compute (midnight), monthly recap (1st of month)
+- **AI** (`ai/`) — Ollama client with structured JSON prompts and three-level system prompt architecture (`full`/`light`/`minimal`). Knowledge module (`knowledge.ts`) loads genre aliases and mood mappings from `data/` at startup, gathers RAG context from DB per-call, and builds modular system prompts. Functions: session naming, recaps, monthly recaps, context inference, weight suggestions, playlist prompt parsing, playlist naming, genre inference. All fire-and-forget; never blocks playback.
+- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, 6 migration versions (v6: `genre_source` column for AI inference tracking). 13 repository classes for data access. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
+- **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), player poll (5s), analytics compute (midnight), monthly recap (1st of month), AI genre inference (6h at :30)
 
 **Key patterns:**
 - Singletons exported directly (`export const engine = new PlaybackEngine()`) — no DI container

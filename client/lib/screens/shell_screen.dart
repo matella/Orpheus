@@ -42,22 +42,27 @@ class ShellScreen extends StatelessWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.music_note_rounded),
             label: 'Now Playing',
+            tooltip: 'Now playing screen',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.timeline_rounded),
             label: 'Session',
+            tooltip: 'Session history',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_rounded),
             label: 'Analytics',
+            tooltip: 'Listening analytics',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.auto_awesome),
             label: 'AI',
+            tooltip: 'AI insights',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_rounded),
             label: 'Settings',
+            tooltip: 'App settings',
           ),
         ],
       ),

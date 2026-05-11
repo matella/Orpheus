@@ -110,6 +110,28 @@ class ApiService {
     await _dio.put('/steering', data: controls);
   }
 
+  // --- Genre & Artist Lock ---
+
+  /// Lock track selection to a specific genre
+  Future<void> setTargetGenre(String genre) async {
+    await _dio.put('/steering/target-genre', data: {'genre': genre});
+  }
+
+  /// Clear the genre lock
+  Future<void> clearTargetGenre() async {
+    await _dio.delete('/steering/target-genre');
+  }
+
+  /// Lock track selection to a specific artist
+  Future<void> setTargetArtist(String artist) async {
+    await _dio.put('/steering/target-artist', data: {'artist': artist});
+  }
+
+  /// Clear the artist lock
+  Future<void> clearTargetArtist() async {
+    await _dio.delete('/steering/target-artist');
+  }
+
   // --- Automation Settings ---
 
   /// Get automation settings

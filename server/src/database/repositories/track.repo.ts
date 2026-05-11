@@ -264,8 +264,9 @@ export function getArtistIdsMissingGenres(limit: number = 50): string[] {
  */
 export function setGenreClusterByArtist(artistId: string, genre: string): number {
   const db = getDb();
+  // Spotify genres overwrite AI-inferred and AI-failed genres (more authoritative source)
   const result = db.prepare(
-    'UPDATE tracks SET genre_cluster = ? WHERE artist_id = ? AND genre_cluster IS NULL',
+    "UPDATE tracks SET genre_cluster = ?, genre_source = 'spotify' WHERE artist_id = ? AND (genre_cluster IS NULL OR genre_source IN ('ai', 'ai_failed'))",
   ).run(genre, artistId);
   return Number(result.changes);
 }
@@ -350,6 +351,59 @@ export function searchLibraryTracks(params: LibrarySearchParams): TrackRow[] {
   bindings.push(params.limit);
 
   return db.prepare(sql).all(...bindings) as unknown as TrackRow[];
+}
+
+// ── AI Genre Inference ─────────────────────────────────────────
+
+/**
+ * Get tracks with null genre_cluster that need AI inference.
+ * Excludes tracks already attempted (genre_source = 'ai_failed').
+ */
+export function getTracksNeedingGenreInference(limit: number = 10): TrackRow[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM tracks
+    WHERE genre_cluster IS NULL
+      AND features_fetched = 1
+      AND genre_source IS NULL
+    ORDER BY id ASC
+    LIMIT ?
+  `).all(limit) as unknown as TrackRow[];
+}
+
+/**
+ * Set genre_cluster from AI inference for a single track.
+ * Only writes if genre_cluster is still NULL (avoids overwriting Spotify data).
+ */
+export function setAiInferredGenre(trackId: number, genre: string): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE tracks SET genre_cluster = ?, genre_source = 'ai' WHERE id = ? AND genre_cluster IS NULL",
+  ).run(genre, trackId);
+}
+
+/**
+ * Mark a track as having failed AI genre inference (so we don't retry).
+ */
+export function markGenreInferenceFailed(trackId: number): void {
+  const db = getDb();
+  db.prepare(
+    "UPDATE tracks SET genre_source = 'ai_failed' WHERE id = ? AND genre_cluster IS NULL",
+  ).run(trackId);
+}
+
+/**
+ * Get count of tracks needing AI genre inference.
+ */
+export function getGenreInferenceBacklog(): number {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT COUNT(*) as count FROM tracks
+    WHERE genre_cluster IS NULL
+      AND features_fetched = 1
+      AND genre_source IS NULL
+  `).get() as { count: number };
+  return row.count;
 }
 
 function mapMoodsToFeatureConditions(moods: string[]): string[] {

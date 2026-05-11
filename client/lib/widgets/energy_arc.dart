@@ -18,7 +18,9 @@ class EnergyArc extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Semantics(
+      label: '$label: ${(value * 100).round()} percent',
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
@@ -47,6 +49,7 @@ class EnergyArc extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    ),
     );
   }
 }

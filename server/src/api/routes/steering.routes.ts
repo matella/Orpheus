@@ -66,11 +66,66 @@ export async function steeringRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * PUT /api/steering/target-genre
+   * Lock track selection to a specific genre.
+   * Body: { genre: string }
+   */
+  fastify.put('/target-genre', async (request, reply) => {
+    const body = request.body as { genre?: string } | null;
+    const genre = body?.genre?.trim();
+
+    if (!genre || genre.length === 0) {
+      return reply.status(400).send({ error: 'MISSING_GENRE', message: 'A genre string is required' });
+    }
+
+    selector.setTargetGenre(genre);
+    broadcast({ type: 'genre_lock_changed', data: { genre, locked: true } });
+    return { success: true, targetGenre: genre };
+  });
+
+  /**
    * DELETE /api/steering/target-genre
    * Clear the target genre, returning the AI to its natural genre selection.
    */
   fastify.delete('/target-genre', async () => {
     selector.setTargetGenre(null);
+    broadcast({ type: 'genre_lock_changed', data: { genre: null, locked: false } });
+    return { success: true };
+  });
+
+  /**
+   * GET /api/steering/target-artist
+   * Get the current session-scoped target artist.
+   */
+  fastify.get('/target-artist', async () => {
+    return { targetArtist: selector.getTargetArtist() };
+  });
+
+  /**
+   * PUT /api/steering/target-artist
+   * Lock track selection to a specific artist.
+   * Body: { artist: string }
+   */
+  fastify.put('/target-artist', async (request, reply) => {
+    const body = request.body as { artist?: string } | null;
+    const artist = body?.artist?.trim();
+
+    if (!artist || artist.length === 0) {
+      return reply.status(400).send({ error: 'MISSING_ARTIST', message: 'An artist name is required' });
+    }
+
+    selector.setTargetArtist(artist);
+    broadcast({ type: 'artist_lock_changed', data: { artist, locked: true } });
+    return { success: true, targetArtist: artist };
+  });
+
+  /**
+   * DELETE /api/steering/target-artist
+   * Clear the target artist lock.
+   */
+  fastify.delete('/target-artist', async () => {
+    selector.setTargetArtist(null);
+    broadcast({ type: 'artist_lock_changed', data: { artist: null, locked: false } });
     return { success: true };
   });
 }

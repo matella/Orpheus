@@ -20,7 +20,9 @@ class SteeringSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Semantics(
+      label: '$label slider, $leftLabel to $rightLabel',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Label and value
@@ -62,6 +64,9 @@ class SteeringSlider extends StatelessWidget {
             min: 0.0,
             max: 1.0,
             onChanged: onChanged,
+            semanticFormatterCallback: (double newValue) {
+              return '$label: ${(newValue * 100).round()} percent';
+            },
           ),
         ),
 
@@ -80,6 +85,7 @@ class SteeringSlider extends StatelessWidget {
           ],
         ),
       ],
+    ),
     );
   }
 }

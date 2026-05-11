@@ -250,7 +250,8 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const { tracks, parsed, source } = await handleMusicRequest(prompt);
+      const result = await handleMusicRequest(prompt);
+      const { tracks, parsed, source } = result;
 
       if (tracks.length === 0) {
         return {
@@ -267,8 +268,8 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
       let injected = 0;
       if (engine.isRunning()) {
         const playbackTracks = tracks.map(toPlaybackTrack);
-        const result = await engine.injectTracks(playbackTracks);
-        injected = result.injected;
+        const injectResult = await engine.injectTracks(playbackTracks);
+        injected = injectResult.injected;
       }
 
       const trackSummaries = tracks.map((t) => ({
@@ -279,11 +280,25 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
         albumArtUrl: t.album_art_url,
       }));
 
-      // Broadcast to WebSocket clients
+      // Broadcast to WebSocket clients (include lock flags if prompt triggered a lock)
       broadcast({
         type: 'request_fulfilled',
-        data: { prompt, injected, tracks: trackSummaries },
+        data: {
+          prompt,
+          injected,
+          tracks: trackSummaries,
+          genreLocked: result.genreLocked ?? null,
+          artistLocked: result.artistLocked ?? null,
+        },
       });
+
+      // Broadcast explicit lock events so all clients update their lock chips
+      if (result.genreLocked) {
+        broadcast({ type: 'genre_lock_changed', data: { genre: result.genreLocked, locked: true } });
+      }
+      if (result.artistLocked) {
+        broadcast({ type: 'artist_lock_changed', data: { artist: result.artistLocked, locked: true } });
+      }
 
       return {
         success: true,

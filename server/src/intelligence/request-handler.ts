@@ -14,6 +14,10 @@ export interface RequestResult {
   tracks: TrackRow[];
   parsed: ParsedMusicRequest;
   source: 'ai' | 'keyword';
+  /** When the prompt implies exclusive intent ("only kpop"), the genre is locked. */
+  genreLocked?: string | null;
+  /** When the prompt implies exclusive intent ("only Daft Punk"), the artist is locked. */
+  artistLocked?: string | null;
 }
 
 /**
@@ -115,12 +119,31 @@ export async function handleMusicRequest(prompt: string): Promise<RequestResult>
     selector.setTargetGenre(targetGenre);
   }
 
+  // 7. Detect lock intent — keywords like "only", "just", "nothing but", "stick to"
+  //    indicate the user wants to lock to this genre or artist exclusively.
+  const lockIntent = detectLockIntent(prompt);
+  let genreLocked: string | null = null;
+  let artistLocked: string | null = null;
+
+  if (lockIntent) {
+    if (parsed.artists.length > 0) {
+      // Explicit artist in prompt → lock artist
+      artistLocked = parsed.artists[0];
+      selector.setTargetArtist(artistLocked);
+      logger.info({ artistLocked }, 'Lock intent detected: artist locked from prompt');
+    } else if (targetGenre) {
+      // Genre detected → lock genre (already set above, but flag it)
+      genreLocked = targetGenre;
+      logger.info({ genreLocked }, 'Lock intent detected: genre locked from prompt');
+    }
+  }
+
   logger.info(
-    { trackCount: tracks.length, requested: parsed.trackCount, targetGenre },
+    { trackCount: tracks.length, requested: parsed.trackCount, targetGenre, genreLocked, artistLocked },
     'Music request fulfilled',
   );
 
-  return { tracks, parsed, source };
+  return { tracks, parsed, source, genreLocked, artistLocked };
 }
 
 // ── Keyword Fallback Parser ──────────────────────────────────────
@@ -259,4 +282,15 @@ function shuffleArray<T>(arr: T[]): void {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+}
+
+/**
+ * Detect whether the user's prompt implies exclusive/lock intent.
+ * Phrases like "only play kpop", "nothing but jazz",
+ * "stick to electronic", "stay on metal", "lock to hip-hop".
+ * Intentionally excludes common false positives like "just", "keep it", "keep playing".
+ */
+function detectLockIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return /\b(only|nothing but|stick to|stay on|stay with|lock to|lock on|exclusively?|solely|purely)\b/.test(lower);
 }
