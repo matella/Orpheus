@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
+import '../providers/dj_provider.dart';
 import '../providers/steering_provider.dart';
 import '../services/api_service.dart';
 import '../services/websocket_service.dart';
@@ -245,6 +246,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           setState(() {
             _lockedArtist = data['artist'] as String?;
           });
+        case 'curator_update':
+          ref.read(djProvider.notifier).onCuratorUpdate(data);
+        case 'curator_fallback':
+          ref.read(djProvider.notifier).onCuratorFallback(data);
+        case 'curator_restored':
+          ref.read(djProvider.notifier).onCuratorRestored();
       }
     });
   }
@@ -469,6 +476,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final steering = ref.watch(steeringProvider);
+    final djState = ref.watch(djProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('ORPHEUS')),
@@ -510,6 +518,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               const SizedBox(height: 24),
 
+              // DJ patter or fallback banner
+              if (_isEngineRunning) ...[
+                _buildPatterBanner(djState),
+              ],
+
               // Now Playing card
               NowPlayingCard(
                 trackName: _isEngineRunning && _trackName.isNotEmpty
@@ -524,6 +537,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 albumArtUrl: _isEngineRunning ? _albumArtUrl : null,
                 isPlaying: _isPlaying && _isEngineRunning,
               ),
+
+              // Pick reason from DJ curator
+              if (_isEngineRunning &&
+                  djState.currentPickReason != null &&
+                  djState.currentPickReason!.isNotEmpty)
+                _buildPickReason(djState.currentPickReason!),
 
               const SizedBox(height: 16),
 
@@ -544,6 +563,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onDislike: _isEngineRunning ? _onDislike : null,
                 onSkip: null, // Skip is now in playback controls
               ),
+
+              const SizedBox(height: 16),
+
+              // Up Next queue from DJ curator
+              if (_isEngineRunning && djState.upNext.isNotEmpty)
+                _buildUpNext(djState),
 
               const SizedBox(height: 16),
 
@@ -676,6 +701,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          _buildPersonaChip(),
+          const SizedBox(width: 6),
           _buildAiChip(),
         ],
       ),
@@ -874,6 +901,238 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: chipColor,
                   fontWeight: FontWeight.w600,
                 ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatterBanner(DjState djState) {
+    if (djState.isFallback) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: OrpheusColors.amberGlow.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: OrpheusColors.amberGlow.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_mode_rounded, size: 15, color: OrpheusColors.amberGlow),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Auto-pilot — DJ curator unavailable, using smart selection',
+                style: OrpheusTypography.bodySmall.copyWith(
+                  color: OrpheusColors.amberGlow,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final patter = djState.patter;
+    final isSilent = djState.preferences.chattiness == 'silent';
+    if (patter.isEmpty || isSilent) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: OrpheusColors.onyx,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: OrpheusColors.slate, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: OrpheusColors.mist),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              patter,
+              style: OrpheusTypography.bodySmall.copyWith(
+                color: OrpheusColors.ivory,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPickReason(String reason) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+      child: Text(
+        reason,
+        style: OrpheusTypography.bodySmall.copyWith(
+          color: OrpheusColors.mist,
+          fontStyle: FontStyle.italic,
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildUpNext(DjState djState) {
+    final picks = djState.upNext.take(2).toList();
+    if (picks.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: OrpheusColors.onyx,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OrpheusColors.slate, width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'UP NEXT',
+            style: GoogleFonts.cinzel(
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+              color: OrpheusColors.lyreGold,
+              letterSpacing: 3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final pick in picks) ...[
+            _buildUpNextRow(pick),
+            if (pick != picks.last) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpNextRow(CuratorPick pick) {
+    final sourceLabel = switch (pick.source) {
+      'similar' => 'similar',
+      'discovery' => 'new',
+      _ => 'library',
+    };
+    final sourceColor = switch (pick.source) {
+      'similar' => const Color(0xFF4A6C9C),
+      'discovery' => const Color(0xFF8B4A9C),
+      _ => const Color(0xFF4A7C59),
+    };
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pick.name,
+                style: OrpheusTypography.bodySmall.copyWith(color: OrpheusColors.ivory),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              Text(
+                pick.artist,
+                style: OrpheusTypography.bodySmall.copyWith(color: OrpheusColors.mist),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: sourceColor.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: sourceColor.withValues(alpha: 0.4), width: 1),
+          ),
+          child: Text(
+            sourceLabel,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: Color.lerp(sourceColor, Colors.white, 0.5)!,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPersonaChip() {
+    final djState = ref.watch(djProvider);
+
+    if (djState.isFallback) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: OrpheusColors.amberGlow.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: OrpheusColors.amberGlow,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'AUTO',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: OrpheusColors.amberGlow,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!_isEngineRunning) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: OrpheusColors.lyreGold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            djState.personaIcon,
+            style: const TextStyle(fontSize: 10),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            djState.personaDisplayName.toUpperCase().replaceAll(' ', ' '),
+            style: GoogleFonts.cinzel(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: OrpheusColors.lyreGold,
+              letterSpacing: 1,
+            ),
           ),
         ],
       ),

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 6;
+const CURRENT_VERSION = 7;
 
 /**
  * Run all database migrations.
@@ -32,6 +32,10 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 6) {
     migrateV6(db);
+  }
+
+  if (version < 7) {
+    migrateV7(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -376,4 +380,26 @@ function migrateV6(db: DatabaseSync): void {
 
   setSchemaVersion(db, 6);
   logger.info('Migration v6 complete');
+}
+
+function migrateV7(db: DatabaseSync): void {
+  logger.info('Running migration v7: DJ preferences');
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS dj_preferences (
+      id INTEGER PRIMARY KEY CHECK (id = 1) DEFAULT 1,
+      persona TEXT NOT NULL DEFAULT 'curator',
+      custom_persona TEXT,
+      chattiness TEXT NOT NULL DEFAULT 'balanced',
+      discovery_appetite TEXT NOT NULL DEFAULT 'comfort',
+      onboarding_completed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run();
+
+  db.prepare(`INSERT OR IGNORE INTO dj_preferences (id) VALUES (1)`).run();
+
+  setSchemaVersion(db, 7);
+  logger.info('Migration v7 complete');
 }

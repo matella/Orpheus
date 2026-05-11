@@ -17,20 +17,35 @@ The LLM curator is the brain that decides what to play and why. The algorithmic 
 
 ### Modified modules
 
-- `ai/ollama.ts` — add schema-constrained generation via Ollama `format` parameter
-- `ai/prompts.ts` — add CurationResult type and curator prompt interfaces
-- `playback/engine.ts` — proactive scheduling, fallback detection, rapid-skip handling
+- `ai/ollama.ts` — upgrade from generic `format: 'json'` (current) to schema-constrained generation: pass a full JSON Schema object to Ollama's `format` parameter and switch the curator calls to use the `/api/chat` endpoint (multi-turn messages) instead of `/api/generate`
+- `ai/prompts.ts` — add CurationResult type and curator prompt builders (system + user message assemblers)
+- `playback/engine.ts` — proactive scheduling (fire curator when last queued track has < 30s remaining), fallback detection, rapid-skip handling
 - `playback/queue.ts` — support 3-track batch loading from curator
 - `api/websocket.ts` — new events: `curator_update`, `curator_fallback`, `curator_restored`
-- `database/migrations.ts` — v6: `dj_preferences` table
+- `database/migrations.ts` — v7: `dj_preferences` table (**v6 is already used** by the `genre_source` column migration; see below)
 - `config.ts` — Last.fm API key (Phase 2), TTS config (Phase 3)
 - `index.ts` — register new routes, initialize curator
 
+### Already implemented (merged from `feature/ai-steering-updates`, commit `cec9e70`)
+
+The following work from the plan is **done** and should not be re-done:
+
+- `intelligence/selector.ts` — `targetGenre` and `targetArtist` session locks, `setTargetGenre/Artist`, `clearTargetGenre/Artist` methods
+- `intelligence/candidate-pool.ts` — artist-lock pre-filter (forces same-artist when lock active, bypasses same-artist exclusion), genre-lock pre-filter via `referenceGenre` override
+- `intelligence/request-handler.ts` — lock intent detection ("only", "just", "nothing but") to auto-activate genre/artist locks
+- `intelligence/scorer.ts` — AI multiplier support per score dimension
+- `ai/service.ts` — `inferTrackGenres()` batch AI genre classification
+- `scheduler/tasks/infer-metadata.ts` — new task: batch-classifies tracks without `genre_cluster` using AI (runs 6h at :30)
+- `database/migrations.ts` — **v6** complete: `genre_source TEXT` column added to `tracks`, backfilled to `'spotify'` for existing rows
+- `database/repositories/track.repo.ts` — `getTracksNeedingGenreInference()`, `setAiInferredGenre()`, `markGenreInferenceFailed()`, `getGenreInferenceBacklog()`
+- `client/lib/widgets/spotify_attribution.dart` — Spotify attribution widget
+- `client/lib/screens/home_screen.dart` — major home screen rebuild (now playing redesign, gesture feedback, better layout)
+
 ### Demoted modules
 
-- `intelligence/selector.ts` — becomes fallback-only, called when LLM is unavailable
-- `intelligence/scorer.ts` — used for transition validation (energy delta check), no longer primary selection
-- `intelligence/candidate-pool.ts` — replaced by pool-builder for primary path, still used in fallback
+- `intelligence/selector.ts` — becomes fallback-only for single-track selection when LLM is unavailable; genre/artist lock logic stays active in both paths
+- `intelligence/scorer.ts` — used for transition validation (energy delta check between curator picks), no longer primary selection
+- `intelligence/candidate-pool.ts` — pool-builder calls this for the "library" bucket; it is **not replaced**, just wrapped
 
 ## LLM Curator Flow
 
@@ -254,7 +269,9 @@ Existing events `state_updated` and `track_changed` are extended with curator me
 
 ## Database
 
-### Migration v6: `dj_preferences` table
+### Migration v7: `dj_preferences` table
+
+> **Note:** Migration v6 was used by the `genre_source` column (added in `cec9e70`). The `dj_preferences` table is therefore v7.
 
 ```sql
 CREATE TABLE dj_preferences (
@@ -276,7 +293,7 @@ Constraints:
 - `custom_persona` — free text, max 500 chars, only used when `persona = 'custom'`
 - Single row (id=1), upserted on every update
 
-### Phase 2 addition: `external_cache` table
+### Phase 2 addition: `external_cache` table (migration v8)
 
 ```sql
 CREATE TABLE external_cache (
@@ -312,7 +329,7 @@ CREATE TABLE external_cache (
 
 Everything described above except external sources and TTS. The "similar" and "discovery" pool slots draw from the Spotify library with different genre filtering. Patter is text-only (displayed in client, no audio).
 
-New files (~9):
+New files (8):
 - `intelligence/curator.ts`
 - `intelligence/pool-builder.ts`
 - `intelligence/listener-context.ts`
@@ -322,13 +339,22 @@ New files (~9):
 - `screens/onboarding_screen.dart`
 - `providers/dj_provider.dart`
 
-Modified files (~13):
-- `ai/ollama.ts`, `ai/prompts.ts`
-- `playback/engine.ts`, `playback/queue.ts`
-- `api/websocket.ts`, `api/server.ts`
-- `database/migrations.ts`, `database/types.ts`
+Modified files (12):
+- `ai/ollama.ts` — schema-constrained generation + `/api/chat` endpoint for curator
+- `ai/prompts.ts` — CurationResult type + curator prompt builders
+- `playback/engine.ts` — proactive scheduling, fallback detection, rapid-skip handling
+- `playback/queue.ts` — 3-track batch load
+- `api/websocket.ts` — `curator_update`, `curator_fallback`, `curator_restored` events
+- `api/server.ts` — register DJ routes
+- `database/migrations.ts` — v7: `dj_preferences`
 - `config.ts`, `index.ts`
-- `home_screen.dart`, `settings_screen.dart`, `routes.dart`, `api_service.dart`, `websocket_service.dart`
+- `home_screen.dart` — DJ patter banner, pick reason, Up Next queue, persona chip, auto-pilot indicator
+- `settings_screen.dart` — DJ Personality section
+- `routes.dart`, `api_service.dart`, `websocket_service.dart`
+
+Already done, do not modify again:
+- `intelligence/selector.ts`, `intelligence/candidate-pool.ts`, `intelligence/request-handler.ts`, `intelligence/scorer.ts`
+- `scheduler/tasks/infer-metadata.ts`, `database/repositories/track.repo.ts`
 
 ### Phase 2 — External Sources
 
@@ -340,7 +366,7 @@ New files (~2):
 
 Modified files (~3):
 - `intelligence/pool-builder.ts`
-- `database/migrations.ts` (v7)
+- `database/migrations.ts` (v8 — external_cache)
 - `config.ts` (Last.fm API key)
 
 Depends on: Phase 1 (pool builder interface).
@@ -378,3 +404,5 @@ Depends on: Phase 1 (patter text output). Independent of Phase 2.
 | Rapid-skip | Bridge track + debounced curator | Never silence. Algorithm bridges while LLM catches up. Throttle on spam-skip. |
 | TTS engine | Deferred | Build abstract interface. Decide Piper vs Kokoro after Phase 1 ships. |
 | Spec scope | One spec, 3 phases | Pieces are tightly coupled in design. Each phase ships independently. |
+| Ollama API for curator | `/api/chat` + schema `format` object | Curator needs multi-turn message format (system + user) and strict schema output. Current `ollama.ts` uses `/api/generate` + `format: 'json'` (generic) — adequate for existing fire-and-forget calls but insufficient for the curator's structured 3-pick response. The chat endpoint + schema object constrains output shape, preventing hallucinated track IDs in picks. |
+| `candidate-pool.ts` role | Wrapped by pool-builder, not replaced | `cec9e70` already added artist/genre lock logic to the existing candidate pool. Pool-builder calls `buildCandidatePool()` for the "library" bucket with lock context, adds discovery/similar ratio logic on top. No need to duplicate the filtering. |

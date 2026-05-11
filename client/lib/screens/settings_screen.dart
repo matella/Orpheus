@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../config/constants.dart';
+import '../providers/dj_provider.dart';
 import '../services/api_service.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _serverUrlController = TextEditingController(text: apiBaseUrl);
+  final _customPersonaController = TextEditingController();
+  bool _customPersonaInitialized = false;
   bool _isConnected = false;
   bool _isChecking = false;
 
@@ -80,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _serverUrlController.dispose();
+    _customPersonaController.dispose();
     super.dispose();
   }
 
@@ -385,6 +391,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 32),
 
+          // DJ Personality
+          Text(
+            'DJ Personality',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Shape how your AI DJ picks and introduces tracks.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          _buildDjPersonalitySection(),
+
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 32),
+
+          // DJ Voice (coming soon)
+          Opacity(
+            opacity: 0.45,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'DJ Voice',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: OrpheusColors.slate,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'coming soon',
+                        style: GoogleFonts.inter(fontSize: 10, color: OrpheusColors.mist),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Text-to-speech for real spoken DJ intros between tracks.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 32),
+
           // About
           Text(
             'About',
@@ -406,6 +468,262 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDjPersonalitySection() {
+    final djState = ref.watch(djProvider);
+    final prefs = djState.preferences;
+
+    // Seed controller once when the provider has loaded a saved custom persona
+    if (!_customPersonaInitialized && prefs.customPersona != null) {
+      _customPersonaController.text = prefs.customPersona!;
+      _customPersonaInitialized = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Persona
+        Text('Persona', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildPersonaChip('curator', 'The Curator', '🎵', prefs.persona),
+            _buildPersonaChip('late_night', 'Late Night', '🌙', prefs.persona),
+            _buildPersonaChip('hype', 'Hype DJ', '🔥', prefs.persona),
+            _buildPersonaChip('chill', 'Chill Host', '☁️', prefs.persona),
+            _buildPersonaChip('custom', 'Custom', '✨', prefs.persona),
+          ],
+        ),
+
+        // Custom persona textarea — shown only when Custom is selected
+        if (prefs.persona == 'custom') ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _customPersonaController,
+            maxLength: 500,
+            maxLines: 4,
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: InputDecoration(
+              hintText: 'Describe your DJ\'s personality, style, and curation taste…',
+              hintStyle: Theme.of(context).textTheme.bodySmall,
+              counterStyle: Theme.of(context).textTheme.labelSmall,
+            ),
+            onChanged: (_) {}, // live edits are held in controller
+            onEditingComplete: () => _saveCustomPersona(),
+            onTapOutside: (_) => _saveCustomPersona(),
+          ),
+        ],
+
+        const SizedBox(height: 20),
+
+        // Chattiness
+        Text('DJ Chattiness', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'How often the DJ adds commentary between tracks.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        _buildSegmentedToggle(
+          options: const ['silent', 'minimal', 'balanced', 'chatty'],
+          labels: const ['Silent', 'Minimal', 'Balanced', 'Chatty'],
+          selected: prefs.chattiness,
+          onSelect: (v) => ref.read(djProvider.notifier).updatePreferences({'chattiness': v}),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Discovery Appetite
+        Text('Discovery Appetite', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Balance between familiar favourites and new discoveries.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        _buildAppetiteToggle(prefs.discoveryAppetite),
+      ],
+    );
+  }
+
+  void _saveCustomPersona() {
+    final text = _customPersonaController.text.trim();
+    ref.read(djProvider.notifier).updatePreferences({'customPersona': text.isEmpty ? null : text});
+  }
+
+  Widget _buildPersonaChip(String value, String label, String icon, String selected) {
+    final isSelected = selected == value;
+    return GestureDetector(
+      onTap: () {
+        if (value != 'custom') _saveCustomPersona(); // persist before switching away
+        ref.read(djProvider.notifier).updatePreferences({'persona': value});
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? OrpheusColors.lyreGold.withValues(alpha: 0.15)
+              : OrpheusColors.onyx,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? OrpheusColors.lyreGold : OrpheusColors.slate,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 14)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? OrpheusColors.lyreGold : OrpheusColors.ivory,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentedToggle({
+    required List<String> options,
+    required List<String> labels,
+    required String selected,
+    required ValueChanged<String> onSelect,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: OrpheusColors.onyx,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: OrpheusColors.slate),
+      ),
+      child: Row(
+        children: [
+          for (int i = 0; i < options.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onSelect(options[i]),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected == options[i]
+                        ? OrpheusColors.lyreGold.withValues(alpha: 0.18)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    labels[i],
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: selected == options[i]
+                          ? OrpheusColors.lyreGold
+                          : OrpheusColors.mist,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppetiteToggle(String selected) {
+    final options = [
+      ('comfort', 'Comfort'),
+      ('balanced', 'Balanced'),
+      ('adventurous', 'Explore'),
+    ];
+
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: OrpheusColors.onyx,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: OrpheusColors.slate),
+          ),
+          child: Row(
+            children: [
+              for (final (value, label) in options)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => ref.read(djProvider.notifier).updatePreferences({'discoveryAppetite': value}),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selected == value
+                            ? OrpheusColors.lyreGold.withValues(alpha: 0.18)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: selected == value
+                              ? OrpheusColors.lyreGold
+                              : OrpheusColors.mist,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Mini ratio bar for currently selected appetite
+        () {
+          final ratios = switch (selected) {
+            'balanced' => [0.50, 0.35, 0.15],
+            'adventurous' => [0.40, 0.30, 0.30],
+            _ => [0.65, 0.25, 0.10],
+          };
+          return Row(
+            children: [
+              Expanded(
+                flex: (ratios[0] * 100).round(),
+                child: Container(height: 4, decoration: BoxDecoration(color: const Color(0xFF4A7C59), borderRadius: BorderRadius.circular(2))),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                flex: (ratios[1] * 100).round(),
+                child: Container(height: 4, decoration: BoxDecoration(color: const Color(0xFF4A6C9C), borderRadius: BorderRadius.circular(2))),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                flex: (ratios[2] * 100).round(),
+                child: Container(height: 4, decoration: BoxDecoration(color: const Color(0xFF8B4A9C), borderRadius: BorderRadius.circular(2))),
+              ),
+            ],
+          );
+        }(),
+        const SizedBox(height: 4),
+        Text(
+          switch (selected) {
+            'balanced' => '50% familiar  ·  35% similar  ·  15% new',
+            'adventurous' => '40% familiar  ·  30% similar  ·  30% new',
+            _ => '65% familiar  ·  25% similar  ·  10% new',
+          },
+          style: GoogleFonts.inter(fontSize: 11, color: OrpheusColors.mist),
+        ),
+      ],
     );
   }
 

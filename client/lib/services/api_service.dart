@@ -279,6 +279,25 @@ class ApiService {
     await _dio.delete('/playlists/$id');
   }
 
+  // --- DJ Curator ---
+
+  /// Get current DJ preferences
+  Future<Map<String, dynamic>> getDjPreferences() async {
+    final response = await _dio.get('/dj/preferences');
+    return response.data;
+  }
+
+  /// Partial update of DJ preferences
+  Future<Map<String, dynamic>> updateDjPreferences(Map<String, dynamic> patch) async {
+    final response = await _dio.put('/dj/preferences', data: patch);
+    return response.data;
+  }
+
+  /// Mark DJ onboarding as complete
+  Future<void> markDjOnboardingComplete() async {
+    await _dio.post('/dj/onboarding/complete');
+  }
+
   // --- Analytics ---
 
   /// Get overview analytics (cached on server)

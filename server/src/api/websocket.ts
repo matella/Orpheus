@@ -62,6 +62,18 @@ export function wireEngineEvents(): void {
   engine.on('transition_complete', (data) => {
     broadcast({ type: 'transition_complete', data });
   });
+
+  engine.on('curator_update', (data) => {
+    broadcast({ type: 'curator_update', data });
+  });
+
+  engine.on('curator_fallback', (data) => {
+    broadcast({ type: 'curator_fallback', data });
+  });
+
+  engine.on('curator_restored', (data) => {
+    broadcast({ type: 'curator_restored', data });
+  });
 }
 
 export function broadcast(message: object): void {
