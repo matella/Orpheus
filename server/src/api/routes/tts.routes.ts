@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { piperAdapter } from '../../tts/piper.js';
 import { getDjPreferences, updateDjPreferences } from '../../database/repositories/dj-preferences.repo.js';
@@ -61,6 +62,9 @@ export async function ttsRoutes(fastify: FastifyInstance): Promise<void> {
     if (!voiceId) {
       return reply.status(400).send({ error: 'voiceId is required' });
     }
+    if (basename(voiceId) !== voiceId || !voiceId.endsWith('.onnx')) {
+      return reply.status(400).send({ error: 'voiceId must be a plain .onnx filename' });
+    }
 
     try {
       const wav = await piperAdapter.preview(voiceId);
@@ -89,6 +93,11 @@ export async function ttsRoutes(fastify: FastifyInstance): Promise<void> {
       // Validate duck volume range
       if (ttsDuckVolume !== undefined && (ttsDuckVolume < 0 || ttsDuckVolume > 1)) {
         return reply.status(400).send({ error: 'ttsDuckVolume must be between 0 and 1' });
+      }
+      if (ttsVoice !== undefined && ttsVoice !== null) {
+        if (basename(ttsVoice) !== ttsVoice || !ttsVoice.endsWith('.onnx')) {
+          return reply.status(400).send({ error: 'ttsVoice must be a plain .onnx filename' });
+        }
       }
 
       const updated = updateDjPreferences({

@@ -600,7 +600,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ? null
                 : () async {
                     setState(() => _ttsPreviewLoading = true);
+                    int? originalVolume;
                     try {
+                      final current = await apiService.getCurrentPlayback();
+                      originalVolume = current?['device']?['volume_percent'] as int?;
+                      if (originalVolume != null) {
+                        await apiService.setVolume((_ttsDuckVolume * 100).round());
+                      }
                       final bytes = await apiService.previewTtsVoice(_ttsVoice!);
                       if (bytes.isNotEmpty && mounted) {
                         final player = AudioPlayer();
@@ -619,6 +625,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       }
                     } catch (_) {
                     } finally {
+                      if (originalVolume != null) {
+                        apiService.setVolume(originalVolume).catchError((_) {});
+                      }
                       if (mounted) setState(() => _ttsPreviewLoading = false);
                     }
                   },
