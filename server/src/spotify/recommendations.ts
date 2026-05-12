@@ -20,12 +20,8 @@ export interface RecommendationOpts {
   limit?: number;
 }
 
-/**
- * Call GET /recommendations. Returns [] on any error (never throws).
- * Spotify enforces a max of 5 seeds total (tracks + artists).
- */
 export async function getRecommendations(opts: RecommendationOpts): Promise<SpotifyRecommendedTrack[]> {
-  const seedTracks = (opts.seedTrackIds ?? []).slice(0, 2);
+  const seedTracks = (opts.seedTrackIds ?? []).slice(0, 5);
   const seedArtists = (opts.seedArtistIds ?? []).slice(0, 5 - seedTracks.length);
 
   if (seedTracks.length + seedArtists.length === 0) return [];
@@ -55,10 +51,6 @@ export async function getRecommendations(opts: RecommendationOpts): Promise<Spot
   }
 }
 
-/**
- * Fetch audio features for a single track via GET /audio-features?ids={id}.
- * Returns null on any error.
- */
 export async function getTrackAudioFeatures(spotifyId: string): Promise<{
   energy: number;
   valence: number;
