@@ -180,7 +180,14 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - Spam-skip detection: 3 skips in 10s triggers an immediate rapid-skip curator call
 - 3-step onboarding wizard on first launch captures appetite, chattiness, and persona preference
 - Home screen shows: DJ patter banner (speech-bubble style, hidden when chattiness is Silent), pick reason below track info, Up Next queue with source badges (library / similar / new), persona chip or "AUTO" badge in status bar
-- Settings screen: DJ Personality section with persona chip row, chattiness segmented toggle, appetite segmented toggle with live mini ratio bar, custom persona textarea
+- Settings screen: DJ Personality section with persona chip row, chattiness segmented toggle, appetite segmented toggle with live mini ratio bar, custom persona textarea; DJ Voice section with Piper TTS enable toggle, voice dropdown with preview button, and music duck-volume slider
+
+### DJ Voice (Piper TTS)
+- Text-to-speech converts DJ patter into spoken audio using [Piper](https://github.com/rhasspy/piper) (optional; degrades gracefully when binary absent)
+- Client-orchestrated volume ducking: Flutter ducks Spotify volume → fetches WAV from server → plays via `just_audio` → restores volume
+- On-demand generation: server spawns `piper.exe` per request (stdin←text, stdout→WAV bytes), ~100ms latency on CPU
+- Configurable: enable/disable toggle, voice model selection (dropdown populated from `PIPER_VOICES_DIR`), duck volume (0–100%)
+- Full graceful degradation: 503 from server when Piper absent → client silently skips audio, patter text still displayed in banner
 
 ### Real-time Updates
 - WebSocket push for playback state changes, track transitions, AI events, curator picks (`curator_update`, `curator_fallback`, `curator_restored`)
@@ -245,6 +252,11 @@ All routes are prefixed with `/api`.
 | DJ | `/dj/preferences` | PUT | Update DJ preferences (partial) |
 | DJ | `/dj/onboarding` | GET | Get onboarding completion status |
 | DJ | `/dj/onboarding/complete` | POST | Mark onboarding complete |
+| Playback | `/playback/volume` | PUT | Set Spotify volume (0–100) |
+| TTS | `/tts/speak?text=` | GET | Generate WAV for given text |
+| TTS | `/tts/voices` | GET | List available Piper voice models |
+| TTS | `/tts/preview` | POST | Preview a specific voice |
+| TTS | `/tts/settings` | PUT | Update TTS preferences |
 | WebSocket | `/ws` | WS | Real-time event stream |
 
 ---
@@ -259,12 +271,12 @@ Music/
       api/
         middleware/           # Error handler
         routes/               # auth, playback, steering, sessions,
-                              # analytics, settings, context, ai, playlist, dj
+                              # analytics, settings, context, ai, playlist, dj, tts
         server.ts             # Fastify setup and route registration
         websocket.ts          # WebSocket broadcast infrastructure
       database/
         connection.ts         # SQLite connection (node:sqlite)
-        migrations.ts         # Schema v1-v7
+        migrations.ts         # Schema v1-v8
         repositories/         # track, interaction, session, preference,
                               # state-history, analytics, settings,
                               # time-preferences, ai-suggestion,
@@ -307,8 +319,11 @@ Music/
         auth.ts               # PKCE flow + token management
         client.ts             # Authenticated Spotify SDK wrapper
         library.ts            # Library sync operations
-        player.ts             # Playback control operations
+        player.ts             # Playback control operations (includes setVolume)
         types.ts              # Spotify type definitions
+      tts/
+        adapter.ts            # TtsAdapter interface + Voice type
+        piper.ts              # PiperAdapter — subprocess wrapper, singleton
       config.ts               # Zod-validated environment config
       index.ts                # Application entry point
     data/
@@ -342,6 +357,7 @@ Music/
       services/
         api_service.dart      # Dio HTTP client for all endpoints
         websocket_service.dart# WebSocket connection management
+        tts_service.dart      # TtsService singleton — duck, fetch WAV, play, restore
       widgets/
         energy_arc.dart       # Semi-circular energy gauge
         feedback_buttons.dart # Like/dislike controls
@@ -359,7 +375,7 @@ Music/
 
 ## Database Schema
 
-SQLite with 7 migration versions:
+SQLite with 8 migration versions:
 
 - **v1:** Core tables — `tracks`, `interactions`, `sessions`, `preferences`, `state_history`, `steering_history`, `time_preferences`, `analytics_cache`, `settings`, `auth_tokens`
 - **v2:** AI support — `ai_suggestions` table, AI-related settings
@@ -368,6 +384,7 @@ SQLite with 7 migration versions:
 - **v5:** Playlist generation — `playlists` table (prompt, parameters, Spotify link, stats), `playlist_tracks` table (track positions, scores, segments with CASCADE delete)
 - **v6:** AI genre inference — `genre_source` column on `tracks` (`spotify` | `ai` | `ai_failed`)
 - **v7:** DJ Curator — `dj_preferences` single-row table (persona, chattiness, discovery_appetite, custom_persona, onboarding_completed). `CHECK (id = 1)` enforces single-row invariant.
+- **v8:** DJ Voice — `tts_enabled`, `tts_voice`, `tts_duck_volume` columns on `dj_preferences`.
 
 ---
 
