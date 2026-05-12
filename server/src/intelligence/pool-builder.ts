@@ -4,6 +4,9 @@ import { stateVectorManager } from './state-vector.js';
 import { loadSteeringControls } from './steering.js';
 import { getTracksWithFeatures } from '../database/repositories/track.repo.js';
 import { getPreference } from '../database/repositories/preference.repo.js';
+import { getTopArtists } from '../database/repositories/top-artists.repo.js';
+import { getRecommendations } from '../spotify/recommendations.js';
+import { getDb } from '../database/connection.js';
 import type { TrackRow } from '../database/types.js';
 import type { DiscoveryAppetite } from '../database/repositories/dj-preferences.repo.js';
 import type { CandidateTrack } from '../ai/prompts.js';
@@ -76,17 +79,18 @@ function toCandidate(track: TrackRow, source: 'library' | 'similar' | 'discovery
  *
  * Three buckets:
  *   library   — from the existing getCandidates() (respects locks + proximity)
- *   similar   — same-genre tracks not in library bucket
- *   discovery — different-genre tracks, biased toward never/rarely played
+ *   similar   — Spotify recommendations seeded by current track/artist, fallback to DB genre match
+ *   discovery — Spotify recommendations seeded by diverse top artists, fallback to DB different-genre
  *
  * Ratios are set by the user's discoveryAppetite, then adjusted by genreOpenness steering.
  */
-export function buildCuratorPool(
+export async function buildCuratorPool(
   sessionId: number,
   appetite: DiscoveryAppetite,
   recentTrackIds: Set<number>,
   recentArtists: Set<string>,
-): CandidateTrack[] {
+  currentTrack?: { spotifyId: string } | null,
+): Promise<CandidateTrack[]> {
   const steering = loadSteeringControls();
   const stateVector = stateVectorManager.getState(sessionId);
   const targetGenre = selector.getTargetGenre();
@@ -142,28 +146,114 @@ export function buildCuratorPool(
       t.valence !== null,
   );
 
-  // Similar: same genre as current state, not same artist as very recent
-  const similarRows = notInLibrary.filter(
+  // Build set of all known Spotify IDs so we can exclude library tracks from Spotify results
+  const existingSpotifyIds = new Set(
+    (getDb().prepare('SELECT spotify_id FROM tracks').all() as { spotify_id: string }[]).map(
+      (r) => r.spotify_id,
+    ),
+  );
+
+  // ── Similar bucket — Spotify recommendations seeded by current track/artist, fallback to local DB ──
+  let similarBucket: CandidateTrack[];
+  if (currentTrack) {
+    const currentRow = getDb()
+      .prepare('SELECT artist_id FROM tracks WHERE spotify_id = ?')
+      .get(currentTrack.spotifyId) as { artist_id: string | null } | undefined;
+    const artistId = currentRow?.artist_id ?? null;
+
+    const simRecs = await getRecommendations({
+      seedTrackIds: [currentTrack.spotifyId],
+      seedArtistIds: artistId ? [artistId] : [],
+      targetEnergy: stateVector?.energy,
+      targetValence: stateVector?.valence,
+      limit: simTarget + 10,
+    });
+
+    const simFiltered = simRecs.filter(
+      (t) =>
+        !existingSpotifyIds.has(t.spotifyId) &&
+        !recentArtistSet.has(t.artist.toLowerCase()),
+    );
+
+    if (simFiltered.length > 0) {
+      similarBucket = simFiltered.slice(0, simTarget).map((t) => ({
+        trackId: t.spotifyId,
+        name: t.name,
+        artist: t.artist,
+        year: null,
+        genres: [],
+        source: 'similar' as const,
+        spotifyUri: t.spotifyUri,
+        artistId: t.artistId,
+        album: t.album ?? undefined,
+        durationMs: t.durationMs,
+        popularity: t.popularity,
+      }));
+    } else {
+      const similarRows = notInLibrary.filter(
+        (t) =>
+          currentGenre &&
+          t.genre_cluster === currentGenre &&
+          !recentArtistSet.has(t.artist.toLowerCase()),
+      );
+      similarBucket = shuffled(similarRows).slice(0, simTarget).map((t) => toCandidate(t, 'similar'));
+    }
+  } else {
+    const similarRows = notInLibrary.filter(
+      (t) =>
+        currentGenre &&
+        t.genre_cluster === currentGenre &&
+        !recentArtistSet.has(t.artist.toLowerCase()),
+    );
+    similarBucket = shuffled(similarRows).slice(0, simTarget).map((t) => toCandidate(t, 'similar'));
+  }
+
+  // ── Discovery bucket — Spotify recommendations seeded by diverse top artists, fallback to local DB ──
+  let discoveryBucket: CandidateTrack[];
+  const topArtistRows = getTopArtists('short_term', 10);
+  const diverseArtistIds = topArtistRows
+    .slice(0, 3)
+    .map((a) => a.spotify_id)
+    .filter((id): id is string => Boolean(id));
+
+  const discRecs = await getRecommendations({
+    seedArtistIds: diverseArtistIds,
+    limit: discTarget + 10,
+  });
+
+  const discFiltered = discRecs.filter(
     (t) =>
-      currentGenre && t.genre_cluster === currentGenre &&
+      !existingSpotifyIds.has(t.spotifyId) &&
       !recentArtistSet.has(t.artist.toLowerCase()),
   );
 
-  // Discovery: different genre (or no genre match), bias toward low play count
-  const discoveryFiltered = notInLibrary.filter(
-    (t) => !currentGenre || t.genre_cluster !== currentGenre,
-  );
-  // Pre-fetch play counts to avoid O(n log n) DB reads inside sort comparator
-  const playCountById = new Map<number, number>();
-  for (const t of discoveryFiltered) {
-    playCountById.set(t.id, getPreference(t.id)?.play_count ?? 0);
+  if (discFiltered.length > 0) {
+    discoveryBucket = discFiltered.slice(0, discTarget).map((t) => ({
+      trackId: t.spotifyId,
+      name: t.name,
+      artist: t.artist,
+      year: null,
+      genres: [],
+      source: 'discovery' as const,
+      spotifyUri: t.spotifyUri,
+      artistId: t.artistId,
+      album: t.album ?? undefined,
+      durationMs: t.durationMs,
+      popularity: t.popularity,
+    }));
+  } else {
+    const discoveryFiltered = notInLibrary.filter(
+      (t) => !currentGenre || t.genre_cluster !== currentGenre,
+    );
+    const playCountById = new Map<number, number>();
+    for (const t of discoveryFiltered) {
+      playCountById.set(t.id, getPreference(t.id)?.play_count ?? 0);
+    }
+    const discoveryRows = discoveryFiltered.sort(
+      (a, b) => (playCountById.get(a.id) ?? 0) - (playCountById.get(b.id) ?? 0),
+    );
+    discoveryBucket = discoveryRows.slice(0, discTarget).map((t) => toCandidate(t, 'discovery'));
   }
-  const discoveryRows = discoveryFiltered.sort(
-    (a, b) => (playCountById.get(a.id) ?? 0) - (playCountById.get(b.id) ?? 0),
-  );
-
-  const similarBucket = shuffled(similarRows).slice(0, simTarget).map((t) => toCandidate(t, 'similar'));
-  const discoveryBucket = discoveryRows.slice(0, discTarget).map((t) => toCandidate(t, 'discovery'));
 
   const pool = [...libraryBucket, ...similarBucket, ...discoveryBucket];
 

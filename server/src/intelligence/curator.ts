@@ -173,11 +173,12 @@ class DjCurator extends EventEmitter {
       currentTrack ? { name: currentTrack.name, artist: currentTrack.artist } : undefined,
     );
 
-    const pool = buildCuratorPool(
+    const pool = await buildCuratorPool(
       sessionId,
       ctx.discoveryAppetite,
       this.recentTrackIds,
       this.recentArtists,
+      currentTrack ? { spotifyId: currentTrack.spotifyId } : null,
     );
 
     if (pool.length < 3) {
