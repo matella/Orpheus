@@ -42,6 +42,7 @@ export function upsertTrack(data: UpsertTrackData): number {
       album = excluded.album,
       album_art_url = excluded.album_art_url,
       duration_ms = excluded.duration_ms,
+      source = CASE WHEN tracks.source = 'library' THEN tracks.source ELSE excluded.source END,
       cached_at = datetime('now')
   `).run(
     data.spotifyId,
@@ -80,6 +81,7 @@ export function upsertTracks(tracks: UpsertTrackData[]): void {
         album = excluded.album,
         album_art_url = excluded.album_art_url,
         duration_ms = excluded.duration_ms,
+        source = CASE WHEN tracks.source = 'library' THEN tracks.source ELSE excluded.source END,
         cached_at = datetime('now')
     `);
 

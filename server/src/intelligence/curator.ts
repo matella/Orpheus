@@ -275,8 +275,7 @@ class DjCurator extends EventEmitter {
       if (!tid || !poolById.has(tid) || used.has(tid)) continue;
 
       const candidateTrack = poolById.get(tid)!;
-      const isExternal = !/^\d+$/.test(tid);
-      const dbRow = isExternal
+      const dbRow = candidateTrack.spotifyUri
         ? await this._resolveExternalTrack(tid, candidateTrack)
         : getTrackById(Number(tid));
       if (!dbRow) continue;
@@ -324,18 +323,21 @@ class DjCurator extends EventEmitter {
     try {
       const existing = getTrackBySpotifyId(spotifyId);
       if (existing) {
-        return trackRowToPlayback(existing as Parameters<typeof trackRowToPlayback>[0], candidate.source);
+        if (existing.features_fetched) {
+          return trackRowToPlayback(existing as Parameters<typeof trackRowToPlayback>[0], candidate.source);
+        }
+        // Row exists but has no audio features — try fetching them now
+      } else {
+        upsertTrack({
+          spotifyId,
+          name: candidate.name,
+          artist: candidate.artist,
+          artistId: candidate.artistId,
+          album: candidate.album,
+          durationMs: candidate.durationMs || 180_000,
+          source: 'external',
+        });
       }
-
-      upsertTrack({
-        spotifyId,
-        name: candidate.name,
-        artist: candidate.artist,
-        artistId: candidate.artistId,
-        album: candidate.album,
-        durationMs: candidate.durationMs ?? 0,
-        source: 'external',
-      });
 
       const features = await getTrackAudioFeatures(spotifyId);
       if (
