@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getTrackStats, getGenreDistribution, markTracksWithDefaultFeatures } from '../../database/repositories/track.repo.js';
 import { engine } from '../../playback/engine.js';
-import { getPlayerState, getDevices, pause, resume, skipToPrevious } from '../../spotify/player.js';
+import { getPlayerState, getDevices, pause, resume, skipToPrevious, setVolume } from '../../spotify/player.js';
 import { fullLibrarySync } from '../../spotify/library.js';
 import { handleMusicRequest } from '../../intelligence/request-handler.js';
 import { toPlaybackTrack } from '../../playback/types.js';
@@ -91,6 +91,23 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
       return { success: true };
     } catch (err: any) {
       return reply.status(502).send({ error: 'SPOTIFY_ERROR', message: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/playback/volume
+   * Set Spotify playback volume. Body: { volumePercent: number (0–100) }
+   */
+  fastify.put<{ Body: { volumePercent: number } }>('/volume', async (request, reply) => {
+    const { volumePercent } = request.body ?? {};
+    if (typeof volumePercent !== 'number') {
+      return reply.status(400).send({ error: 'volumePercent (number) is required' });
+    }
+    try {
+      await setVolume(volumePercent);
+      return reply.send({ volumePercent: Math.max(0, Math.min(100, Math.round(volumePercent))) });
+    } catch (err) {
+      return reply.status(500).send({ error: 'Failed to set volume' });
     }
   });
 
