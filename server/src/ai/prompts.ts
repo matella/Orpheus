@@ -520,12 +520,18 @@ export const CURATION_RESULT_SCHEMA: Record<string, unknown> = {
 };
 
 export interface CandidateTrack {
-  trackId: string;
+  trackId: string;        // DB integer string for library tracks; Spotify track ID for external
   name: string;
   artist: string;
   year: number | null;
   genres: string[];
   source: 'library' | 'similar' | 'discovery';
+  // External-only fields — present when trackId is a Spotify ID, not a DB integer
+  spotifyUri?: string;
+  artistId?: string;
+  album?: string;
+  durationMs?: number;
+  popularity?: number;
 }
 
 export interface ListenerContextForPrompt {
