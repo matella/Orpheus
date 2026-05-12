@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:just_audio/just_audio.dart';
 import '../config/theme.dart';
 import '../config/constants.dart';
 import '../providers/dj_provider.dart';
@@ -30,6 +31,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // AI settings
   bool _aiEnabled = true;
   double _aiAnalysisInterval = 5;
+
+  // TTS / DJ Voice settings
+  bool _ttsEnabled = false;
+  String? _ttsVoice;
+  double _ttsDuckVolume = 0.3;
+  List<Map<String, dynamic>> _ttsVoices = [];
+  bool _ttsAvailable = true;
+  bool _ttsPreviewLoading = false;
 
   Future<void> _checkConnection() async {
     setState(() => _isChecking = true);
@@ -64,6 +73,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingSettings = false);
+    }
+
+    try {
+      final djPrefs = ref.read(djProvider).preferences;
+      setState(() {
+        _ttsEnabled = djPrefs.ttsEnabled;
+        _ttsVoice = djPrefs.ttsVoice;
+        _ttsDuckVolume = djPrefs.ttsDuckVolume;
+      });
+      final voices = await apiService.getTtsVoices();
+      setState(() {
+        _ttsVoices = voices;
+        _ttsAvailable = voices.isNotEmpty || _ttsEnabled;
+      });
+    } catch (_) {
+      setState(() => _ttsAvailable = false);
     }
   }
 
@@ -408,40 +433,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 32),
 
-          // DJ Voice (coming soon)
-          Opacity(
-            opacity: 0.45,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'DJ Voice',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: OrpheusColors.slate,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'coming soon',
-                        style: GoogleFonts.inter(fontSize: 10, color: OrpheusColors.mist),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Text-to-speech for real spoken DJ intros between tracks.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
+          _buildDjVoiceSection(),
 
           const SizedBox(height: 32),
           const Divider(),
@@ -546,6 +538,128 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const SizedBox(height: 10),
         _buildAppetiteToggle(prefs.discoveryAppetite),
+      ],
+    );
+  }
+
+  Widget _buildDjVoiceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('DJ Voice', style: Theme.of(context).textTheme.headlineSmall),
+            const Spacer(),
+            Switch(
+              value: _ttsEnabled,
+              activeColor: OrpheusColors.lyreGold,
+              onChanged: _ttsAvailable
+                  ? (v) {
+                      setState(() => _ttsEnabled = v);
+                      ref.read(djProvider.notifier).updatePreferences({'ttsEnabled': v});
+                      apiService.updateTtsSettings(ttsEnabled: v).catchError((_) {});
+                    }
+                  : null,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _ttsAvailable
+              ? 'Spoken DJ commentary between tracks using Piper TTS.'
+              : 'Piper TTS is not installed. Set PIPER_BINARY_PATH and PIPER_VOICES_DIR in your .env to enable.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        if (_ttsAvailable && _ttsEnabled) ...[
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: _ttsVoices.any((v) => v['id'] == _ttsVoice) ? _ttsVoice : null,
+            decoration: InputDecoration(
+              labelText: 'Voice',
+              labelStyle: OrpheusTypography.bodySmall.copyWith(color: OrpheusColors.mist),
+              filled: true,
+              fillColor: OrpheusColors.onyx,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            dropdownColor: OrpheusColors.onyx,
+            style: OrpheusTypography.bodySmall.copyWith(color: OrpheusColors.ivory),
+            items: _ttsVoices
+                .map((v) => DropdownMenuItem<String>(
+                      value: v['id'] as String,
+                      child: Text(v['name'] as String? ?? v['id'] as String),
+                    ))
+                .toList(),
+            onChanged: (v) {
+              setState(() => _ttsVoice = v);
+              apiService.updateTtsSettings(ttsVoice: v).catchError((_) {});
+            },
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _ttsPreviewLoading || _ttsVoice == null
+                ? null
+                : () async {
+                    setState(() => _ttsPreviewLoading = true);
+                    try {
+                      final bytes = await apiService.previewTtsVoice(_ttsVoice!);
+                      if (bytes.isNotEmpty && mounted) {
+                        final player = AudioPlayer();
+                        try {
+                          await player.setAudioSource(
+                            AudioSource.uri(
+                              Uri.dataFromBytes(bytes, mimeType: 'audio/wav'),
+                            ),
+                          );
+                          await player.play();
+                          await player.processingStateStream
+                              .firstWhere((s) => s == ProcessingState.completed);
+                        } finally {
+                          await player.dispose();
+                        }
+                      }
+                    } catch (_) {
+                    } finally {
+                      if (mounted) setState(() => _ttsPreviewLoading = false);
+                    }
+                  },
+            icon: _ttsPreviewLoading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.play_arrow, size: 18),
+            label: Text('Preview voice', style: OrpheusTypography.bodySmall),
+            style: OutlinedButton.styleFrom(foregroundColor: OrpheusColors.lyreGold),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Music volume during speech',
+                  style: OrpheusTypography.bodySmall.copyWith(color: OrpheusColors.mist),
+                ),
+              ),
+              Text(
+                '${(_ttsDuckVolume * 100).round()}%',
+                style: OrpheusTypography.labelSmall.copyWith(color: OrpheusColors.lyreGold),
+              ),
+            ],
+          ),
+          Slider(
+            value: _ttsDuckVolume,
+            min: 0.0,
+            max: 1.0,
+            divisions: 20,
+            activeColor: OrpheusColors.lyreGold,
+            inactiveColor: OrpheusColors.slate,
+            onChanged: (v) => setState(() => _ttsDuckVolume = v),
+            onChangeEnd: (v) {
+              apiService.updateTtsSettings(ttsDuckVolume: v).catchError((_) {});
+            },
+          ),
+        ],
       ],
     );
   }
