@@ -31,6 +31,9 @@ export async function ttsRoutes(fastify: FastifyInstance): Promise<void> {
     if (!text || text.trim().length === 0) {
       return reply.status(400).send({ error: 'text query parameter is required' });
     }
+    if (text.length > 2000) {
+      return reply.status(400).send({ error: 'text must be 2000 characters or fewer' });
+    }
 
     const prefs = getDjPreferences();
 
@@ -78,6 +81,10 @@ export async function ttsRoutes(fastify: FastifyInstance): Promise<void> {
     '/settings',
     async (request, reply) => {
       const { ttsEnabled, ttsVoice, ttsDuckVolume } = request.body ?? {};
+
+      if (ttsEnabled !== undefined && typeof ttsEnabled !== 'boolean') {
+        return reply.status(400).send({ error: 'ttsEnabled must be a boolean' });
+      }
 
       // Validate duck volume range
       if (ttsDuckVolume !== undefined && (ttsDuckVolume < 0 || ttsDuckVolume > 1)) {
