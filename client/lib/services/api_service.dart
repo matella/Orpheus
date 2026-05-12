@@ -353,6 +353,16 @@ class ApiService {
     return voices.cast<Map<String, dynamic>>();
   }
 
+  /// Fetch WAV audio bytes for the given patter text.
+  Future<List<int>> fetchTtsAudio(String text) async {
+    final response = await _dio.get<List<int>>(
+      '/tts/speak',
+      queryParameters: {'text': text},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? [];
+  }
+
   /// Generate a WAV preview for a specific voice. Returns raw bytes.
   Future<List<int>> previewTtsVoice(String voiceId) async {
     final response = await _dio.post<List<int>>(

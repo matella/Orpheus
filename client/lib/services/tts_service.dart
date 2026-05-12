@@ -2,16 +2,15 @@ import 'package:just_audio/just_audio.dart';
 import 'api_service.dart';
 
 class TtsService {
+  bool _speaking = false;
+
   /// Speak patter text: duck Spotify volume, play WAV, restore.
   ///
-  /// [text] — the patter to speak.
-  /// [duckVolume] — Spotify volume fraction during speech (0.0–1.0).
-  ///
-  /// Silently no-ops if [text] is empty or the server returns an error.
+  /// No-ops if text is empty or a playback is already in progress.
   Future<void> speakPatter(String text, double duckVolume) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || _speaking) return;
+    _speaking = true;
 
-    // Get current volume so we can restore it after playback.
     int originalVolume = 50;
     try {
       final state = await apiService.getCurrentPlayback();
@@ -23,11 +22,14 @@ class TtsService {
     try {
       await apiService.setVolume(duckPercent);
 
+      final bytes = await apiService.fetchTtsAudio(text.trim());
+      if (bytes.isEmpty) return;
+
       final player = AudioPlayer();
       try {
-        final url =
-            '${apiService.baseUrl}/tts/speak?text=${Uri.encodeComponent(text.trim())}';
-        await player.setUrl(url);
+        await player.setAudioSource(
+          AudioSource.uri(Uri.dataFromBytes(bytes, mimeType: 'audio/wav')),
+        );
         await player.play();
         await player.processingStateStream
             .firstWhere((s) => s == ProcessingState.completed);
@@ -35,7 +37,7 @@ class TtsService {
         await player.dispose();
       }
     } finally {
-      // Always restore volume, even on error.
+      _speaking = false;
       try {
         await apiService.setVolume(originalVolume);
       } catch (_) {}
