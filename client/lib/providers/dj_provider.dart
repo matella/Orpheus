@@ -9,6 +9,9 @@ class DjPreferences {
   final String chattiness;
   final String discoveryAppetite;
   final bool onboardingCompleted;
+  final bool ttsEnabled;
+  final String? ttsVoice;
+  final double ttsDuckVolume;
 
   const DjPreferences({
     this.persona = 'curator',
@@ -16,6 +19,9 @@ class DjPreferences {
     this.chattiness = 'balanced',
     this.discoveryAppetite = 'comfort',
     this.onboardingCompleted = false,
+    this.ttsEnabled = false,
+    this.ttsVoice,
+    this.ttsDuckVolume = 0.3,
   });
 
   DjPreferences copyWith({
@@ -24,6 +30,9 @@ class DjPreferences {
     String? chattiness,
     String? discoveryAppetite,
     bool? onboardingCompleted,
+    bool? ttsEnabled,
+    String? ttsVoice,
+    double? ttsDuckVolume,
   }) {
     return DjPreferences(
       persona: persona ?? this.persona,
@@ -31,6 +40,9 @@ class DjPreferences {
       chattiness: chattiness ?? this.chattiness,
       discoveryAppetite: discoveryAppetite ?? this.discoveryAppetite,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      ttsEnabled: ttsEnabled ?? this.ttsEnabled,
+      ttsVoice: ttsVoice ?? this.ttsVoice,
+      ttsDuckVolume: ttsDuckVolume ?? this.ttsDuckVolume,
     );
   }
 
@@ -41,6 +53,9 @@ class DjPreferences {
       chattiness: json['chattiness'] as String? ?? 'balanced',
       discoveryAppetite: json['discoveryAppetite'] as String? ?? 'comfort',
       onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
+      ttsEnabled: json['ttsEnabled'] as bool? ?? false,
+      ttsVoice: json['ttsVoice'] as String?,
+      ttsDuckVolume: (json['ttsDuckVolume'] as num?)?.toDouble() ?? 0.3,
     );
   }
 }
@@ -175,6 +190,9 @@ class DjNotifier extends Notifier<DjState> {
       customPersona: patch['customPersona'] as String?,
       chattiness: patch['chattiness'] as String?,
       discoveryAppetite: patch['discoveryAppetite'] as String?,
+      ttsEnabled: patch['ttsEnabled'] as bool?,
+      ttsVoice: patch['ttsVoice'] as String?,
+      ttsDuckVolume: (patch['ttsDuckVolume'] as num?)?.toDouble(),
     );
   }
 
