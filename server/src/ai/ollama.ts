@@ -135,3 +135,71 @@ export async function generateJson<T>(
     return null;
   }
 }
+
+/**
+ * Schema-constrained chat completion via Ollama /api/chat.
+ * Passes a full JSON Schema object to the `format` parameter (Ollama 0.5+),
+ * which constrains the model's output to the exact shape defined by the schema.
+ * Use this for structured outputs where a loose `format: 'json'` is insufficient.
+ *
+ * @param messages Array of {role, content} chat messages
+ * @param schema   JSON Schema object constraining the response shape
+ * @param options  timeout (ms), temperature override
+ */
+export async function generateChat<T>(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  schema: Record<string, unknown>,
+  options?: { timeout?: number; temperature?: number },
+): Promise<T | null> {
+  const timeout = options?.timeout ?? AI_REQUEST_TIMEOUT_MS;
+  const start = Date.now();
+
+  try {
+    logger.debug(
+      { model: config.ai.ollamaModel, messageCount: messages.length },
+      'Ollama generateChat request',
+    );
+
+    const response = await fetch(`${config.ai.ollamaHost}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.ai.ollamaModel,
+        messages,
+        format: schema,
+        stream: false,
+        options: { temperature: options?.temperature ?? 0.7 },
+      }),
+      signal: AbortSignal.timeout(timeout),
+    });
+
+    if (!response.ok) {
+      logger.warn({ status: response.status }, 'Ollama generateChat returned non-OK status');
+      return null;
+    }
+
+    const data = (await response.json()) as { message?: { content?: string } };
+    const elapsed = Date.now() - start;
+    const content = data.message?.content;
+
+    if (!content) {
+      logger.warn({ elapsed }, 'Ollama generateChat returned empty content');
+      return null;
+    }
+
+    logger.info({ elapsed, contentLength: content.length }, 'Ollama generateChat complete');
+    logger.debug({ content }, 'Ollama generateChat raw response');
+
+    const parsed = JSON.parse(content);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      logger.warn({ type: typeof parsed }, 'Ollama generateChat returned non-object JSON');
+      return null;
+    }
+
+    return parsed as T;
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    logger.warn({ err, elapsed }, 'Ollama generateChat failed');
+    return null;
+  }
+}

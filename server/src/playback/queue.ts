@@ -76,6 +76,19 @@ export class TrackQueue {
     logger.debug({ track: track.name, artist: track.artist }, 'Queue: set next');
   }
 
+  /**
+   * Replace the entire lookahead with a new set of tracks (curator batch load).
+   * Resets sync flags since the Spotify queue is now out of date.
+   */
+  replaceLookahead(tracks: PlaybackTrack[]): { syncFlagsReset: true } {
+    this.lookahead = [...tracks];
+    logger.info(
+      { count: tracks.length, tracks: tracks.map((t) => `${t.name} (${t.artist})`) },
+      'Queue: lookahead replaced by curator',
+    );
+    return { syncFlagsReset: true };
+  }
+
   /** Append a track to the end of the lookahead. */
   pushLookahead(track: PlaybackTrack): void {
     this.lookahead.push(track);

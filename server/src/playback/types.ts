@@ -21,6 +21,8 @@ export interface PlaybackTrack {
   aggressiveness: number | null;
   familiarityScore: number;
   adopted?: boolean;          // True if adopted from existing Spotify queue at startup
+  source?: 'library' | 'similar' | 'discovery'; // Set by DJ curator pool builder
+  pickReason?: string;        // LLM explanation for why this track was picked
 }
 
 export interface EngineState {

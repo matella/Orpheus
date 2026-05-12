@@ -36,6 +36,49 @@ class OrpheusColors {
   );
 }
 
+/// Static TextStyles matching the Orpheus theme — use where BuildContext is unavailable.
+class OrpheusTypography {
+  OrpheusTypography._();
+
+  static TextStyle get displaySmall => GoogleFonts.cinzel(
+        fontSize: 20,
+        fontWeight: FontWeight.w400,
+        color: OrpheusColors.ivory,
+        letterSpacing: 2,
+      );
+
+  static TextStyle get bodyLarge => GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        color: OrpheusColors.ivory,
+      );
+
+  static TextStyle get bodyMedium => GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: OrpheusColors.ivory,
+      );
+
+  static TextStyle get bodySmall => GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: OrpheusColors.mist,
+      );
+
+  static TextStyle get labelLarge => GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: OrpheusColors.ivory,
+      );
+
+  static TextStyle get labelSmall => GoogleFonts.inter(
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: OrpheusColors.mist,
+        letterSpacing: 1.5,
+      );
+}
+
 /// Build the Orpheus dark theme
 ThemeData buildOrpheusTheme() {
   final textTheme = _buildTextTheme();

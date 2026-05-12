@@ -7,12 +7,21 @@ import '../screens/intelligence_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/playlist_screen.dart';
 import '../screens/auth_screen.dart';
+import '../screens/onboarding_screen.dart';
 import '../screens/shell_screen.dart';
 import '../services/api_service.dart';
 
 /// Cached auth state to avoid hitting the server on every navigation.
 /// Refreshed on each redirect check, but short-circuits after first success.
 bool _lastKnownAuth = false;
+bool _onboardingChecked = false;
+bool _onboardingCompleted = false;
+
+/// Call after completing onboarding so the redirect guard doesn't loop back.
+void markOnboardingDone() {
+  _onboardingChecked = true;
+  _onboardingCompleted = true;
+}
 
 Future<bool> _checkAuth() async {
   try {
@@ -27,18 +36,36 @@ Future<bool> _checkAuth() async {
   return _lastKnownAuth;
 }
 
+Future<bool> _checkOnboarding() async {
+  if (_onboardingChecked) return _onboardingCompleted;
+  try {
+    final prefs = await apiService.getDjPreferences();
+    _onboardingCompleted = prefs['onboardingCompleted'] == true;
+    _onboardingChecked = true;
+  } catch (e) {
+    developer.log('Onboarding check failed: $e', name: 'Router');
+    _onboardingCompleted = true; // Assume done on error — don't block startup
+    _onboardingChecked = true;
+  }
+  return _onboardingCompleted;
+}
+
 final router = GoRouter(
   initialLocation: '/',
   redirect: (context, state) async {
-    final isAuthRoute = state.matchedLocation == '/auth';
+    final location = state.matchedLocation;
+    final isAuthRoute = location == '/auth';
+    final isOnboardingRoute = location == '/onboarding';
 
-    // Fast path: once authenticated, skip the HTTP check on every navigation.
-    // Only re-verify when navigating to /auth or when never authenticated.
-    if (_lastKnownAuth && !isAuthRoute) return null;
+    // Determine auth state — use cached value after first success
+    final isAuthed = _lastKnownAuth ? true : await _checkAuth();
 
-    final isAuthed = await _checkAuth();
-    if (!isAuthed && !isAuthRoute) return '/auth';
-    if (isAuthed && isAuthRoute) return '/';
+    if (!isAuthed) return isAuthRoute ? null : '/auth';
+    if (isAuthRoute) return (await _checkOnboarding()) ? '/' : '/onboarding';
+    if (!isOnboardingRoute) {
+      final done = await _checkOnboarding();
+      if (!done) return '/onboarding';
+    }
     return null;
   },
   routes: [
@@ -74,6 +101,10 @@ final router = GoRouter(
     GoRoute(
       path: '/auth',
       builder: (context, state) => const AuthScreen(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
     ),
   ],
 );

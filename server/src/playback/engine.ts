@@ -12,6 +12,8 @@ import { analyzeQueueCoherence } from '../intelligence/coherence.js';
 import { generateSessionName, generateSessionRecap } from '../ai/service.js';
 import { getAiSettings } from '../database/repositories/settings.repo.js';
 import { recordPlay } from '../database/repositories/preference.repo.js';
+import { curator } from '../intelligence/curator.js';
+import type { CuratorUpdate } from '../intelligence/curator.js';
 import { TrackQueue } from './queue.js';
 import { SessionManager } from './session.js';
 import { toPlaybackTrack } from './types.js';
@@ -33,6 +35,9 @@ export interface EngineEvents {
   session_ended: { sessionId: number; trackCount: number };
   state_updated: { state: EngineState; current: PlaybackTrack | null; next: PlaybackTrack | null; trajectory: TrajectoryPoint[] };
   transition_complete: { adoptedTracks: number; coherenceScore: number | null };
+  curator_update: CuratorUpdate;
+  curator_fallback: { reason: 'timeout' | 'unavailable' | 'error' };
+  curator_restored: Record<string, never>;
 }
 
 /**
@@ -67,6 +72,22 @@ class PlaybackEngine extends EventEmitter {
   private noDeviceCount = 0;
   /** Number of consecutive no-device polls before stopping the engine. */
   private static readonly NO_DEVICE_TOLERANCE = 3;
+  /** Whether a curator call is currently in flight (prevents concurrent calls). */
+  private curatorCallInFlight = false;
+  /** Threshold in ms below which we proactively trigger the curator. */
+  private static readonly CURATOR_PROACTIVE_THRESHOLD_MS = 30_000;
+
+  // Bound curator event handlers — stored so we can remove them precisely in stop()
+  private readonly _onCuratorUpdate = (update: CuratorUpdate) => {
+    this.loadCuratorPicks(update);
+    this.emit('curator_update', update);
+  };
+  private readonly _onCuratorFallback = (payload: { reason: 'timeout' | 'unavailable' | 'error' }) => {
+    this.emit('curator_fallback', payload);
+  };
+  private readonly _onCuratorRestored = () => {
+    this.emit('curator_restored', {} as Record<string, never>);
+  };
 
   /**
    * Start the engine for a given device.
@@ -100,6 +121,12 @@ class PlaybackEngine extends EventEmitter {
     this.emit('session_started', { sessionId, deviceName: this.deviceName });
     // Skip default state vector init — gracefulStartup() seeds it from actual tracks
     selector.initSession(sessionId, true);
+    curator.initSession(sessionId);
+
+    // Forward curator events as engine events; _onCuratorUpdate also loads picks into queue
+    curator.on('curator_update', this._onCuratorUpdate);
+    curator.on('curator_fallback', this._onCuratorFallback);
+    curator.on('curator_restored', this._onCuratorRestored);
     logger.info({ deviceId, deviceName, initialContext }, 'Playback engine started');
 
     // Attempt graceful startup (respects current playback)
@@ -161,6 +188,11 @@ class PlaybackEngine extends EventEmitter {
       this.emit('session_ended', { sessionId, trackCount: this.trackCount });
     }
 
+    curator.endSession();
+    curator.off('curator_update', this._onCuratorUpdate);
+    curator.off('curator_fallback', this._onCuratorFallback);
+    curator.off('curator_restored', this._onCuratorRestored);
+
     this.queue.clear();
     this.injectedQueue = [];
     this.nextSyncedToSpotify = false;
@@ -176,6 +208,7 @@ class PlaybackEngine extends EventEmitter {
     this.adoptedTrackCount = 0;
     this.coherenceScore = null;
     this.noDeviceCount = 0;
+    this.curatorCallInFlight = false;
     this.status = 'idle';
 
     logger.info('Playback engine stopped');
@@ -236,6 +269,8 @@ class PlaybackEngine extends EventEmitter {
         completionRatio: current.durationMs > 0 ? listenDuration / current.durationMs : 0,
         skipPositionMs: listenDuration,
       });
+
+      curator.onSkip();
 
       // Notify intelligence engine of skip
       const sessionId = this.session.getSessionId();
@@ -633,8 +668,9 @@ class PlaybackEngine extends EventEmitter {
       selector.onTrackPlayed(sessionId, trackRow);
     }
 
-    // Fill the rest of the queue
+    // Fill the rest of the queue, then trigger curator for first batch
     await this.fillQueue();
+    this.fireCurator('session_start');
 
     this.emit('track_changed', {
       current: track,
@@ -687,6 +723,86 @@ class PlaybackEngine extends EventEmitter {
         logger.warn({ err, track: buffer.name }, 'Failed to sync buffer track to Spotify queue');
       }
     }
+  }
+
+  /**
+   * Fire an async curator call without blocking the poll loop.
+   * Guards against concurrent calls with curatorCallInFlight.
+   */
+  private fireCurator(trigger: 'proactive' | 'session_start' | 'request' | 'steering' | 'rapid_skip'): void {
+    if (this.curatorCallInFlight) return;
+    this.curatorCallInFlight = true;
+
+    const currentTrack = this.queue.getCurrent();
+    // loadCuratorPicks is called by the _onCuratorUpdate listener, which handles
+    // both this path and the fallback-retry path in curator.ts
+    curator.curate(trigger, currentTrack, () => this.selectNextTrack())
+      .catch((err) => logger.warn({ err, trigger }, 'Curator call failed'))
+      .finally(() => {
+        this.curatorCallInFlight = false;
+      });
+  }
+
+  /**
+   * Load curator picks into the queue and sync the first two to Spotify.
+   */
+  private loadCuratorPicks(update: CuratorUpdate): void {
+    if (update.picks.length === 0) return;
+
+    const tracks = update.picks.map((p) => {
+      const t = { ...p.track, pickReason: p.reason };
+      return t;
+    });
+
+    const { syncFlagsReset } = this.queue.replaceLookahead(tracks);
+    if (syncFlagsReset) {
+      this.nextSyncedToSpotify = false;
+      this.bufferSyncedToSpotify = false;
+    }
+
+    // Async Spotify queue sync (best-effort, errors are non-fatal)
+    this.syncCuratorPicksToSpotify(tracks).catch((err) =>
+      logger.warn({ err }, 'Failed to sync curator picks to Spotify'),
+    );
+
+    // Notify curator of the tracks it picked (for recent context tracking)
+    for (const pick of update.picks) {
+      curator.onTrackPlayed(pick.track);
+    }
+
+    this.emitState();
+    logger.info(
+      { tracks: tracks.map((t) => `${t.name} (${t.artist})`), patter: update.patter.slice(0, 60) },
+      'Curator picks loaded into queue',
+    );
+  }
+
+  private async syncCuratorPicksToSpotify(tracks: PlaybackTrack[]): Promise<void> {
+    const next = tracks[0];
+    const buffer = tracks[1];
+
+    if (next && !this.nextSyncedToSpotify) {
+      try {
+        await addToQueue(next.uri, this.deviceId ?? undefined);
+        this.nextSyncedToSpotify = true;
+      } catch (err) {
+        logger.warn({ err, track: next.name }, 'Failed to sync curator next track to Spotify');
+      }
+    }
+
+    if (buffer && !this.bufferSyncedToSpotify) {
+      try {
+        await addToQueue(buffer.uri, this.deviceId ?? undefined);
+        this.bufferSyncedToSpotify = true;
+      } catch (err) {
+        logger.warn({ err, track: buffer.name }, 'Failed to sync curator buffer track to Spotify');
+      }
+    }
+  }
+
+  /** Expose curator firing for steering route handler. */
+  triggerCuratorForSteering(): void {
+    curator.onSteeringChanged();
   }
 
   /**
@@ -863,9 +979,28 @@ class PlaybackEngine extends EventEmitter {
 
     this.lastProgressMs = progressMs;
 
-    // Always keep the queue topped up -- ensures next + buffer are filled
-    // so the AI always has at least 2 tracks ready for recalibration.
+    // Always keep the queue topped up — ensures next + buffer are filled.
     await this.fillQueue();
+
+    // Proactive curator trigger: fire when total remaining audio is under threshold
+    // and no curator call is already in flight.
+    if (!this.curatorCallInFlight) {
+      const current = this.queue.getCurrent();
+      if (current) {
+        const currentRemaining = current.durationMs > 0
+          ? Math.max(0, current.durationMs - progressMs)
+          : 0;
+        let lookaheadMs = 0;
+        for (let i = 0; i < this.queue.getLookaheadSize(); i++) {
+          lookaheadMs += this.queue.peekAt(i)?.durationMs ?? 0;
+        }
+        const totalRemainingMs = currentRemaining + lookaheadMs;
+
+        if (totalRemainingMs < PlaybackEngine.CURATOR_PROACTIVE_THRESHOLD_MS) {
+          this.fireCurator('proactive');
+        }
+      }
+    }
   }
 
   private async handleTrackChange(
@@ -1015,6 +1150,7 @@ class PlaybackEngine extends EventEmitter {
         selector.onTrackPlayed(sessionId, trackRow);
       }
     }
+    if (current) curator.onTrackPlayed(current);
 
     // --- Transition logic (before fillQueue so drain doesn't conflict) ---
     await this.checkTransition();

@@ -485,6 +485,99 @@ Respond with ONLY this JSON format:
 }`;
 }
 
+// ── DJ Curator ───────────────────────────────────────────────────────
+
+export interface CurationPick {
+  track_id: string;
+  reason: string;
+}
+
+export interface CurationResult {
+  picks: CurationPick[];
+  patter: string;
+}
+
+/** JSON Schema passed to Ollama's `format` parameter for schema-constrained output. */
+export const CURATION_RESULT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    picks: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: 'object',
+        properties: {
+          track_id: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['track_id', 'reason'],
+      },
+    },
+    patter: { type: 'string' },
+  },
+  required: ['picks', 'patter'],
+};
+
+export interface CandidateTrack {
+  trackId: string;
+  name: string;
+  artist: string;
+  year: number | null;
+  genres: string[];
+  source: 'library' | 'similar' | 'discovery';
+}
+
+export interface ListenerContextForPrompt {
+  topArtists: string[];
+  topGenres: string[];
+  recentTracks: Array<{ name: string; artist: string }>;
+  justPlayed: { name: string; artist: string } | null;
+  mood: string | null;
+  timePhraseDescription: string;
+}
+
+/** Build the user message for the curator — context + candidate pool. */
+export function buildCuratorUserMessage(
+  ctx: ListenerContextForPrompt,
+  pool: CandidateTrack[],
+): string {
+  const parts: string[] = [];
+
+  parts.push('## Listener');
+  if (ctx.topArtists.length > 0) parts.push(`Loves: ${ctx.topArtists.slice(0, 8).join(', ')}`);
+  if (ctx.topGenres.length > 0) parts.push(`Genres they live in: ${ctx.topGenres.slice(0, 6).join(', ')}`);
+  parts.push(`Time: ${ctx.timePhraseDescription}`);
+  if (ctx.mood) parts.push(`Mood set by listener: **${ctx.mood}**`);
+
+  parts.push('\n## Just played');
+  parts.push(
+    ctx.justPlayed
+      ? `  ${ctx.justPlayed.artist} — ${ctx.justPlayed.name}`
+      : '  (session start)',
+  );
+
+  if (ctx.recentTracks.length > 0) {
+    parts.push('\n## Recent session (most recent first)');
+    for (const t of ctx.recentTracks.slice(0, 6)) {
+      parts.push(`  ${t.artist} — ${t.name}`);
+    }
+  }
+
+  parts.push(`\n## Candidate pool (${pool.length} tracks)`);
+  for (const t of pool) {
+    const meta: string[] = [];
+    if (t.year) meta.push(String(t.year));
+    if (t.genres.length > 0) meta.push(t.genres.slice(0, 2).join('/'));
+    const suffix = meta.length > 0 ? ` — ${meta.join(', ')}` : '';
+    parts.push(`  [${t.trackId}] ${t.artist} — ${t.name}${suffix}  (${t.source})`);
+  }
+
+  parts.push('\nPick 3. Return JSON only.');
+
+  return parts.join('\n');
+}
+
 export function buildContextInferencePrompt(ctx: ContextInferenceInput): string {
   const learnedSection = ctx.learnedPrefs
     ? `LEARNED PREFERENCES for ${ctx.timeBracket} (from ${ctx.learnedPrefs.sampleCount} sessions):

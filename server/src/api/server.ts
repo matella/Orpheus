@@ -17,6 +17,8 @@ import { sessionRoutes } from './routes/session.routes.js';
 import { analyticsRoutes } from './routes/analytics.routes.js';
 import { contextRoutes } from './routes/context.routes.js';
 import { playlistRoutes } from './routes/playlist.routes.js';
+import { djRoutes } from './routes/dj.routes.js';
+import { ttsRoutes } from './routes/tts.routes.js';
 import { registerWebSocket, wireEngineEvents } from './websocket.js';
 
 // Rate limiter: 10 mutation requests per 5 seconds per IP
@@ -99,6 +101,8 @@ export async function buildServer() {
   await server.register(analyticsRoutes, { prefix: '/api/analytics' });
   await server.register(contextRoutes, { prefix: '/api/context' });
   await server.register(playlistRoutes, { prefix: '/api/playlists' });
+  await server.register(djRoutes, { prefix: '/api/dj' });
+  await server.register(ttsRoutes, { prefix: '/api/tts' });
 
   return server;
 }

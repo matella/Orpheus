@@ -52,8 +52,8 @@ helm uninstall orpheus                                       # Remove
 Entry point: `index.ts` — initializes DB, starts Fastify server, registers cron tasks.
 
 **Layered architecture:**
-- **API** (`api/`) — Fastify routes grouped by domain (auth, playback, steering, sessions, analytics, feedback, context, ai, settings, playlists). WebSocket for real-time push.
-- **Playback Engine** (`playback/engine.ts`) — Core loop polling Spotify every 5s. Extends EventEmitter (`track_changed`, `session_started`, `session_ended`, `state_updated`, `transition_complete`). Manages session lifecycle. Supports graceful startup — adopts current Spotify playback and queue when coherent.
+- **API** (`api/`) — Fastify routes grouped by domain (auth, playback, steering, sessions, analytics, feedback, context, ai, settings, playlists, dj, tts). WebSocket for real-time push. TTS routes: `GET /api/tts/speak?text=`, `GET /api/tts/voices`, `POST /api/tts/preview`, `PUT /api/tts/settings`. All return 503 when Piper not installed.
+- **Playback Engine** (`playback/engine.ts`) — Core loop polling Spotify every 5s. Extends EventEmitter (`track_changed`, `session_started`, `session_ended`, `state_updated`, `transition_complete`, `curator_update`, `curator_fallback`, `curator_restored`). Manages session lifecycle. Supports graceful startup — adopts current Spotify playback and queue when coherent. Proactive curator trigger fires when < 30s of audio remains.
 - **Intelligence Pipeline** (`intelligence/`) — The track selection brain:
   - `state-vector.ts` — 8D state (energy, valence, tempo, genre, familiarity, vocalness, aggressiveness, fatigue) updated via EMA (alpha=0.2). Skips null audio features.
   - `selector.ts` — Orchestrator: state → steering blend → candidate pool → score → weighted random pick from top 3. Manages `targetGenre` and `targetArtist` locks (session-scoped, cleared on session end)
@@ -65,9 +65,18 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
   - `coherence.ts` — Queue coherence analysis for graceful startup
   - `request-handler.ts` — Natural language music request processing
   - `playlist-generator.ts` — AI-enhanced playlist generation: prompt parsing → candidate pool → per-segment scoring → transition ordering → Spotify export
+  - `curator.ts` — DJ curator orchestrator: calls LLM to pick 3 tracks + patter text. Handles proactive/session-start/steering/rapid-skip triggers, spam-skip detection, fallback mode with 2-min retry, steering debounce (5s). Singleton `curator`.
+  - `listener-context.ts` — Assembles LLM context (top artists/genres, steering state, DJ prefs, recently played, time-of-day phrase)
+  - `pool-builder.ts` — Builds 40–60 track candidate pool at configured library/similar/discovery ratios. Ratios adjusted for steering genreOpenness. Uses appetite ratios: comfort 65/25/10, balanced 50/35/15, adventurous 40/30/30.
 - **Spotify** (`spotify/`) — PKCE OAuth, SDK wrapper, library sync, player control
-- **AI** (`ai/`) — Ollama client with structured JSON prompts and three-level system prompt architecture (`full`/`light`/`minimal`). Knowledge module (`knowledge.ts`) loads genre aliases and mood mappings from `data/` at startup, gathers RAG context from DB per-call, and builds modular system prompts. Functions: session naming, recaps, monthly recaps, context inference, weight suggestions, playlist prompt parsing, playlist naming, genre inference. All fire-and-forget; never blocks playback.
-- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, 6 migration versions (v6: `genre_source` column for AI inference tracking). 13 repository classes for data access. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
+- **AI** (`ai/`) — Ollama client with structured JSON prompts and three-level system prompt architecture (`full`/`light`/`minimal`). Knowledge module (`knowledge.ts`) loads genre aliases and mood mappings from `data/` at startup, gathers RAG context from DB per-call, and builds modular system prompts. Functions: session naming, recaps, monthly recaps, context inference, weight suggestions, playlist prompt parsing, playlist naming, genre inference, **DJ curation** (schema-constrained `/api/chat` via `generateChat<T>()`). All fire-and-forget; never blocks playback.
+  - `personas.ts` — 4 preset DJ personas (curator, late_night, hype, chill) + custom slot. `buildPersonaSystemPrompt()` assembles the full system prompt including steering description.
+  - `prompts.ts` — `CurationResult` / `CuratorPick` / `CandidateTrack` types; `CURATION_RESULT_SCHEMA` (JSON Schema for Ollama format constraint); `buildCuratorUserMessage()`.
+  - `ollama.ts` — `generateJson()` (existing, `/api/generate`) + `generateChat<T>()` (new, `/api/chat` + JSON Schema format).
+- **TTS** (`tts/`) — Piper TTS integration for DJ voice audio:
+  - `adapter.ts` — `TtsAdapter` interface: `speak(text, voiceId?)`, `listVoices()`, `isAvailable()`
+  - `piper.ts` — `PiperAdapter` singleton. Spawns `piper.exe` as subprocess (stdin←text, stdout→WAV). 10s timeout with `settled` flag to prevent double-reject. `isAvailable()` checks `PIPER_BINARY_PATH` exists. Throws `AiError` on failure.
+- **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, **8 migration versions** (v7: `dj_preferences` table; v8: `tts_enabled`, `tts_voice`, `tts_duck_volume` columns). 14 repository classes. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
 - **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), player poll (5s), analytics compute (midnight), monthly recap (1st of month), AI genre inference (6h at :30)
 
 **Key patterns:**
@@ -82,11 +91,12 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
 
 Entry point: `main.dart` — wraps app in Riverpod `ProviderScope`.
 
-- **State:** Riverpod providers (`session_provider.dart`, `steering_provider.dart`, `playlist_provider.dart`). Steering uses 300ms debounced API sync with optimistic local updates.
+- **State:** Riverpod providers (`session_provider.dart`, `steering_provider.dart`, `playlist_provider.dart`, `dj_provider.dart`). Steering uses 300ms debounced API sync with optimistic local updates. DJ provider loads preferences on init, handles curator WS events (`onCuratorUpdate`, `onCuratorFallback`, `onCuratorRestored`).
 - **Services:** `api_service.dart` (Dio HTTP to `127.0.0.1:3000/api`), `websocket_service.dart` (auto-reconnect WS)
-- **Routing:** `go_router` with `ShellRoute` for persistent bottom nav. Auth screen is outside the shell.
-- **Theme** (`config/theme.dart`): Dark theme with Lyre Gold (#D4A843) accent. Typography: Cinzel for headings, Inter for body, JetBrains Mono for data values.
-- **Screens:** Home (now playing + controls + playlist FAB), Session (history + energy curves), Analytics (charts), Intelligence (AI insights), Settings, Playlist (generation form + result view), Auth
+- **Routing:** `go_router` with `ShellRoute` for persistent bottom nav. Auth and onboarding screens are outside the shell. Redirect guard checks auth then onboarding completion; `markOnboardingDone()` busts the cached check after the wizard completes.
+- **Theme** (`config/theme.dart`): Dark theme with Lyre Gold (#D4A843) accent. Typography: Cinzel for headings, Inter for body, JetBrains Mono for data values. `OrpheusTypography` class provides static `TextStyle` getters for use outside `BuildContext`.
+- **Screens:** Home (now playing + DJ patter banner + pick reason + Up Next queue + persona chip), Session (history + energy curves), Analytics (charts), Intelligence (AI insights), Settings (includes DJ Personality + DJ Voice sections), Playlist (generation form + result view), Auth, Onboarding (3-step wizard: appetite → chattiness → persona)
+- **Services:** `tts_service.dart` — `TtsService` singleton with `speakPatter(text, duckVolume)`. Lifecycle: read current volume → duck → fetch WAV via `apiService.fetchTtsAudio()` → play via `just_audio` → restore volume (in `finally`). `_speaking` flag prevents overlapping playback.
 
 ## Critical Constraints
 

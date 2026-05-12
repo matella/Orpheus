@@ -197,3 +197,12 @@ export async function addTracksToPlaylist(
     });
   }
 }
+
+/**
+ * Set Spotify playback volume (0–100).
+ */
+export async function setVolume(volumePercent: number): Promise<number> {
+  const clamped = Math.max(0, Math.min(100, Math.round(volumePercent)));
+  await spotifyFetch(`/me/player/volume?volume_percent=${clamped}`, { method: 'PUT' });
+  return clamped;
+}

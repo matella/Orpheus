@@ -1,0 +1,250 @@
+<h2>Phase Breakdown — Build Sequence</h2>
+<p class="subtitle">Three shippable phases. Each adds value independently. Later phases build on earlier ones.</p>
+
+<!-- Phase 1 -->
+<div class="mockup" style="margin-bottom: 20px;">
+  <div class="mockup-header" style="background: #1e2a1e; color: #4a8;">Phase 1 — LLM Curator + Onboarding (core)</div>
+  <div class="mockup-body" style="padding: 20px;">
+
+    <div style="display: flex; gap: 24px;">
+      <!-- What ships -->
+      <div style="flex: 2;">
+        <div style="color: #4a8; font-weight: bold; margin-bottom: 12px; font-size: 15px;">What ships</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Server: DJ Curator</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>ListenerContext assembler</li>
+              <li>Pool builder (library-only for now)</li>
+              <li>LLM call with JSON schema constraint</li>
+              <li>Pool validation + backfill</li>
+              <li>Transition validation safety net</li>
+              <li>Rapid-skip handling + bridge tracks</li>
+            </ul>
+          </div>
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Server: Engine Integration</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Proactive scheduling (30s buffer)</li>
+              <li>3-track batch queue loading</li>
+              <li>Fallback to algorithmic selector</li>
+              <li>Auto-retry every 2 min</li>
+              <li>New WS events (curator_update, fallback, restored)</li>
+            </ul>
+          </div>
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Server: AI Module</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Schema-constrained Ollama generation</li>
+              <li>4 persona system prompts</li>
+              <li>Chattiness prompt hints</li>
+              <li>DJ preferences API endpoints</li>
+              <li>Onboarding status endpoint</li>
+            </ul>
+          </div>
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Server: Database</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Migration v6: dj_preferences table</li>
+              <li>DJ preferences repository</li>
+              <li>Persona, chattiness, discovery appetite</li>
+              <li>Custom persona text storage</li>
+              <li>Onboarding completed flag</li>
+            </ul>
+          </div>
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Client: Home Screen</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>DJ patter banner</li>
+              <li>Pick reason below track info</li>
+              <li>Up Next queue (3 tracks)</li>
+              <li>Persona chip in status bar</li>
+              <li>Auto-pilot fallback indicator</li>
+            </ul>
+          </div>
+
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Client: Onboarding + Settings</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>3-step onboarding wizard</li>
+              <li>DJ Personality settings section</li>
+              <li>DJ Voice section (greyed, Phase 3)</li>
+              <li>Onboarding provider + API calls</li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Meta -->
+      <div style="flex: 1;">
+        <div style="background: #111; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #4a8; font-weight: bold; margin-bottom: 8px;">Depends on</div>
+          <div style="color: #aaa; font-size: 13px;">Nothing — builds on existing infra</div>
+        </div>
+        <div style="background: #111; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #4a8; font-weight: bold; margin-bottom: 8px;">New files</div>
+          <div style="font-family: monospace; font-size: 11px; color: #888; line-height: 2;">
+            intelligence/curator.ts<br>
+            intelligence/pool-builder.ts<br>
+            intelligence/listener-context.ts<br>
+            ai/personas.ts<br>
+            api/routes/dj.routes.ts<br>
+            database/repos/dj-preferences.repo.ts<br>
+            <span style="color: #555;">---</span><br>
+            screens/onboarding_screen.dart<br>
+            providers/dj_provider.dart
+          </div>
+        </div>
+        <div style="background: #111; border-radius: 8px; padding: 16px;">
+          <div style="color: #4a8; font-weight: bold; margin-bottom: 8px;">Modified files</div>
+          <div style="font-family: monospace; font-size: 11px; color: #888; line-height: 2;">
+            ai/ollama.ts<br>
+            ai/prompts.ts<br>
+            playback/engine.ts<br>
+            playback/queue.ts<br>
+            api/websocket.ts<br>
+            database/migrations.ts<br>
+            config.ts, index.ts<br>
+            <span style="color: #555;">---</span><br>
+            home_screen.dart<br>
+            settings_screen.dart<br>
+            routes.dart<br>
+            api_service.dart<br>
+            websocket_service.dart
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Phase 2 -->
+<div class="mockup" style="margin-bottom: 20px;">
+  <div class="mockup-header" style="background: #1a2a3a; color: #3a6a8a;">Phase 2 — External Sources (wider pool)</div>
+  <div class="mockup-body" style="padding: 20px;">
+    <div style="display: flex; gap: 24px;">
+      <div style="flex: 2;">
+        <div style="color: #3a8aaa; font-weight: bold; margin-bottom: 12px; font-size: 15px;">What ships</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">ListenBrainz Integration</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Similar recordings API</li>
+              <li>MBID → Spotify ID resolution</li>
+              <li>Result caching</li>
+            </ul>
+          </div>
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Last.fm Integration</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Similar tracks API</li>
+              <li>Tag enrichment</li>
+              <li>API key config</li>
+            </ul>
+          </div>
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Pool Builder Upgrade</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Multi-source assembly</li>
+              <li>Dynamic ratio from steering</li>
+              <li>External cache SQLite table</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div style="flex: 1;">
+        <div style="background: #111; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #3a8aaa; font-weight: bold; margin-bottom: 8px;">Depends on</div>
+          <div style="color: #aaa; font-size: 13px;">Phase 1 (pool builder interface)</div>
+        </div>
+        <div style="background: #111; border-radius: 8px; padding: 16px;">
+          <div style="color: #3a8aaa; font-weight: bold; margin-bottom: 8px;">New files</div>
+          <div style="font-family: monospace; font-size: 11px; color: #888; line-height: 2;">
+            intelligence/external-sources.ts<br>
+            database/repos/external-cache.repo.ts
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 3 -->
+<div class="mockup" style="margin-bottom: 20px;">
+  <div class="mockup-header" style="background: #2a1a2e; color: #8a4a8a;">Phase 3 — TTS Voice Layer</div>
+  <div class="mockup-body" style="padding: 20px;">
+    <div style="display: flex; gap: 24px;">
+      <div style="flex: 2;">
+        <div style="color: #aa6aaa; font-weight: bold; margin-bottom: 12px; font-size: 15px;">What ships</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Abstract TTS Adapter</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Engine interface (speak, listVoices, preview)</li>
+              <li>Piper implementation</li>
+              <li>Kokoro implementation</li>
+              <li>Engine auto-detection</li>
+            </ul>
+          </div>
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Playback Integration</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Volume ducking via Spotify API</li>
+              <li>Patter audio scheduling</li>
+              <li>Skip patter on empty string</li>
+              <li>Voice preview endpoint</li>
+            </ul>
+          </div>
+          <div style="background: #111; border-radius: 8px; padding: 12px;">
+            <div style="color: #D4A843; font-weight: bold; font-size: 13px;">Client: Voice Settings</div>
+            <ul style="color: #aaa; font-size: 12px; line-height: 1.8; margin: 6px 0 0; padding-left: 16px;">
+              <li>Un-grey DJ Voice section</li>
+              <li>Engine selector (from installed)</li>
+              <li>Voice picker with preview button</li>
+              <li>Volume slider</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div style="flex: 1;">
+        <div style="background: #111; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #aa6aaa; font-weight: bold; margin-bottom: 8px;">Depends on</div>
+          <div style="color: #aaa; font-size: 13px;">Phase 1 (patter text output). TTS engine decision made after Phase 1 ships.</div>
+        </div>
+        <div style="background: #111; border-radius: 8px; padding: 16px;">
+          <div style="color: #aa6aaa; font-weight: bold; margin-bottom: 8px;">New files</div>
+          <div style="font-family: monospace; font-size: 11px; color: #888; line-height: 2;">
+            tts/adapter.ts (interface)<br>
+            tts/piper.ts<br>
+            tts/kokoro.ts<br>
+            api/routes/tts.routes.ts
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Timeline -->
+<div style="padding: 16px; background: #1a1a2e; border-radius: 8px; border-left: 3px solid #D4A843;">
+  <h3 style="margin-top: 0;">Phase dependencies</h3>
+  <div style="display: flex; align-items: center; gap: 12px; font-size: 14px; padding: 8px 0;">
+    <div style="background: #1e2a1e; border: 1px solid #4a8; border-radius: 8px; padding: 10px 20px; color: #4a8; font-weight: bold;">Phase 1<br><span style="font-size: 11px; color: #aaa; font-weight: normal;">Curator + Onboarding</span></div>
+    <div style="color: #555; font-size: 20px;">→</div>
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="background: #1a2a3a; border: 1px solid #3a6a8a; border-radius: 8px; padding: 10px 20px; color: #3a8aaa; font-weight: bold;">Phase 2<br><span style="font-size: 11px; color: #aaa; font-weight: normal;">External Sources</span></div>
+      <div style="background: #2a1a2e; border: 1px solid #8a4a8a; border-radius: 8px; padding: 10px 20px; color: #aa6aaa; font-weight: bold;">Phase 3<br><span style="font-size: 11px; color: #aaa; font-weight: normal;">TTS Voice</span></div>
+    </div>
+    <div style="color: #888; font-size: 12px; margin-left: 12px; line-height: 1.8;">
+      ← Phases 2 and 3 are <strong style="color:#ccc;">independent</strong><br>
+      &nbsp;&nbsp;&nbsp;of each other. Can build in either order.
+    </div>
+  </div>
+</div>

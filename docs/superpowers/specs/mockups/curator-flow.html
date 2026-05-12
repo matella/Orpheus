@@ -1,0 +1,201 @@
+<h2>LLM Curator Flow — The Core Loop</h2>
+<p class="subtitle">What happens from "queue is running low" to "3 tracks queued with patter"</p>
+
+<!-- Trigger -->
+<div class="mockup">
+  <div class="mockup-header">Step-by-step flow</div>
+  <div class="mockup-body" style="padding: 24px; font-size: 14px;">
+
+    <!-- Step 1 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">1</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Trigger — Proactive Scheduling</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Engine polls Spotify every 5s. When <code style="background:#2a2a3e; padding:2px 6px; border-radius:3px;">remaining_ms &lt; 30000</code> on the last planned track, fire the curator.<br>
+          <span style="color: #888;">Also triggers on: session start, user music request, steering change (debounced 5s).</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">2</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Assemble ListenerContext</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Gather from multiple sources into one object:
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">top_artists / top_genres</div>
+            <div style="color: #777;">← top-artists.repo.ts</div>
+          </div>
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">recent_tracks / just_played</div>
+            <div style="color: #777;">← session.repo.ts + engine state</div>
+          </div>
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">mood + steering values</div>
+            <div style="color: #777;">← settings.repo.ts (steering controls)</div>
+          </div>
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">local_time + time_phrase</div>
+            <div style="color: #777;">← system clock + context-learning.ts</div>
+          </div>
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">DJ persona + chattiness</div>
+            <div style="color: #777;">← dj_preferences (new table)</div>
+          </div>
+          <div style="background: #1a1a2e; padding: 10px; border-radius: 6px; font-size: 12px;">
+            <div style="color: #88aaff; font-weight: bold;">discovery_appetite</div>
+            <div style="color: #777;">← dj_preferences (new table)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">3</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Build Candidate Pool</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Three sources, ratios from user's discovery appetite:
+        </div>
+        <div style="margin-top: 10px;">
+          <!-- Ratio bar -->
+          <div style="display: flex; height: 32px; border-radius: 6px; overflow: hidden; font-size: 12px; font-weight: bold;">
+            <div style="flex: 65; background: #2a5a3a; display: flex; align-items: center; justify-content: center; color: #fff;">Library 65%</div>
+            <div style="flex: 25; background: #3a4a6a; display: flex; align-items: center; justify-content: center; color: #fff;">Similar 25%</div>
+            <div style="flex: 10; background: #5a3a5a; display: flex; align-items: center; justify-content: center; color: #fff;">Discovery 10%</div>
+          </div>
+          <div style="color: #888; font-size: 11px; margin-top: 4px;">↑ Comfort-first default. Adjustable per user. Genre openness steering shifts ratios dynamically.</div>
+        </div>
+        <div style="color: #aaa; margin-top: 10px; line-height: 1.7;">
+          <strong style="color:#ccc;">Pre-filtering:</strong> Steering axes remove mismatches before the LLM sees them.<br>
+          <span style="color: #888;">Energy at 0.9 → drop tracks with energy &lt; 0.5 from the pool.</span><br>
+          <strong style="color:#ccc;">Recency exclusion:</strong> Last 10 tracks + last 3 artists excluded.<br>
+          <strong style="color:#ccc;">Target pool size:</strong> 40–60 tracks (tuned to 7B model context).
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">4</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Call LLM (Schema-Constrained)</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Build the prompt from:
+        </div>
+        <div style="background: #111; border: 1px solid #333; border-radius: 6px; padding: 14px; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8;">
+          <span style="color: #D4A843;">System:</span> <span style="color: #aaa;">DJ persona prompt (selected preset or custom)</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ chattiness hint ("minimal commentary")<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ steering description ("energy cranked to 0.9")<br><br>
+          <span style="color: #88aaff;">User:</span> <span style="color: #aaa;">ListenerContext (artists, genres, time, mood)</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ just_played + recent session<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ candidate pool (40-60 tracks formatted)<br><br>
+          <span style="color: #4a8;">Format:</span> <span style="color: #aaa;">JSON schema → { picks: [{track_id, reason}×3], patter: string }</span><br>
+          <span style="color: #4a8;">Options:</span> <span style="color: #aaa;">temperature 0.7, timeout 15s</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">5</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Validate + Safety Net</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Three validation layers:
+        </div>
+        <div style="margin-top: 10px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <div style="background: #2a3a2a; border: 1px solid #4a8; border-radius: 6px; padding: 10px; flex: 1;">
+              <div style="color: #4a8; font-weight: bold; font-size: 13px;">① Pool validation</div>
+              <div style="color: #aaa; font-size: 12px; margin-top: 4px;">Every track_id must exist in the pool. Hallucinated IDs → dropped, backfilled from pool.</div>
+            </div>
+            <div style="background: #2a3a2a; border: 1px solid #4a8; border-radius: 6px; padding: 10px; flex: 1;">
+              <div style="color: #4a8; font-weight: bold; font-size: 13px;">② Transition check</div>
+              <div style="color: #aaa; font-size: 12px; margin-top: 4px;">Algorithmic scorer checks adjacent energy deltas. Reorder if delta &gt; 0.8 between neighbors.</div>
+            </div>
+            <div style="background: #2a3a2a; border: 1px solid #4a8; border-radius: 6px; padding: 10px; flex: 1;">
+              <div style="color: #4a8; font-weight: bold; font-size: 13px;">③ Dedup guard</div>
+              <div style="color: #aaa; font-size: 12px; margin-top: 4px;">No duplicate artists in the 3 picks unless the LLM flagged it in the reason as intentional.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;">
+      <div style="min-width: 36px; height: 36px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #111;">6</div>
+      <div style="flex: 1;">
+        <div style="color: #D4A843; font-weight: bold; font-size: 15px;">Queue + Broadcast</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          Load 3 picks into the queue. Sync first 2 to Spotify queue via API.<br>
+          Broadcast via WebSocket:
+        </div>
+        <div style="background: #111; border: 1px solid #333; border-radius: 6px; padding: 12px; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+          <span style="color: #4a8;">→ ws:</span> <span style="color: #aaa;">{ type: "curator_update", picks: [...], patter: "...", source: "llm" }</span><br>
+          <span style="color: #4a8;">→ ws:</span> <span style="color: #aaa;">{ type: "state_updated", queue: [...] }</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fallback -->
+    <div style="display: flex; gap: 16px; align-items: flex-start; padding-top: 16px; border-top: 1px solid #333;">
+      <div style="min-width: 36px; height: 36px; background: #a44; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff;">!</div>
+      <div style="flex: 1;">
+        <div style="color: #e88; font-weight: bold; font-size: 15px;">Fallback Path — LLM Unavailable</div>
+        <div style="color: #aaa; margin-top: 6px; line-height: 1.7;">
+          If Ollama is unreachable or times out (15s):
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 12px;">
+          <div style="background: #2a1a1a; border: 1px solid #a44; border-radius: 6px; padding: 10px; flex: 1; font-size: 12px;">
+            <div style="color: #e88; font-weight: bold;">Immediate</div>
+            <div style="color: #aaa; margin-top: 4px;">Fall back to existing selector (single track, algorithmic scoring). Music never stops.</div>
+          </div>
+          <div style="background: #2a1a1a; border: 1px solid #a44; border-radius: 6px; padding: 10px; flex: 1; font-size: 12px;">
+            <div style="color: #e88; font-weight: bold;">Notify</div>
+            <div style="color: #aaa; margin-top: 4px;">WS broadcast: <code>{ type: "curator_fallback", reason: "..." }</code>. Client shows "Auto-pilot" indicator.</div>
+          </div>
+          <div style="background: #2a1a1a; border: 1px solid #a44; border-radius: 6px; padding: 10px; flex: 1; font-size: 12px;">
+            <div style="color: #e88; font-weight: bold;">Retry</div>
+            <div style="color: #aaa; margin-top: 4px;">Health check every 2 min. When LLM recovers, switch back to curator. WS: <code>curator_restored</code>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Timing -->
+<div style="margin-top: 24px; padding: 16px; background: #1a1a2e; border-radius: 8px; border-left: 3px solid #D4A843;">
+  <h3 style="margin-top: 0;">Timing budget</h3>
+  <div style="display: flex; gap: 16px; color: #ccc; font-size: 14px;">
+    <div style="flex:1;">
+      <div style="color: #D4A843; font-weight: bold;">Context assembly</div>
+      <div>~50ms (all local DB reads)</div>
+    </div>
+    <div style="flex:1;">
+      <div style="color: #D4A843; font-weight: bold;">Pool building</div>
+      <div>~100ms (query + filter)</div>
+    </div>
+    <div style="flex:1;">
+      <div style="color: #D4A843; font-weight: bold;">LLM call</div>
+      <div>2–10s (7B model, local)</div>
+    </div>
+    <div style="flex:1;">
+      <div style="color: #D4A843; font-weight: bold;">Validation</div>
+      <div>~5ms (in-memory checks)</div>
+    </div>
+    <div style="flex:1;">
+      <div style="color: #D4A843; font-weight: bold;">Total</div>
+      <div>~3–11s (well within 30s buffer)</div>
+    </div>
+  </div>
+</div>

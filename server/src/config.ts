@@ -24,6 +24,10 @@ const configSchema = z.object({
     ollamaHost: z.string(),
     ollamaModel: z.string(),
   }),
+  tts: z.object({
+    piperBinaryPath: z.string().optional(),
+    piperVoicesDir: z.string().optional(),
+  }),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -49,6 +53,10 @@ function loadConfig(): Config {
       enabled: process.env.AI_ENABLED === 'true',
       ollamaHost: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
       ollamaModel: process.env.OLLAMA_MODEL ?? 'llama3.2',
+    },
+    tts: {
+      piperBinaryPath: process.env.PIPER_BINARY_PATH,
+      piperVoicesDir: process.env.PIPER_VOICES_DIR,
     },
   };
 

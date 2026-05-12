@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 6;
+const CURRENT_VERSION = 8;
 
 /**
  * Run all database migrations.
@@ -32,6 +32,14 @@ export function runMigrations(db: DatabaseSync): void {
 
   if (version < 6) {
     migrateV6(db);
+  }
+
+  if (version < 7) {
+    migrateV7(db);
+  }
+
+  if (version < 8) {
+    migrateV8(db);
   }
 
   logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
@@ -376,4 +384,45 @@ function migrateV6(db: DatabaseSync): void {
 
   setSchemaVersion(db, 6);
   logger.info('Migration v6 complete');
+}
+
+function migrateV7(db: DatabaseSync): void {
+  logger.info('Running migration v7: DJ preferences');
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS dj_preferences (
+      id INTEGER PRIMARY KEY CHECK (id = 1) DEFAULT 1,
+      persona TEXT NOT NULL DEFAULT 'curator',
+      custom_persona TEXT,
+      chattiness TEXT NOT NULL DEFAULT 'balanced',
+      discovery_appetite TEXT NOT NULL DEFAULT 'comfort',
+      onboarding_completed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run();
+
+  db.prepare(`INSERT OR IGNORE INTO dj_preferences (id) VALUES (1)`).run();
+
+  setSchemaVersion(db, 7);
+  logger.info('Migration v7 complete');
+}
+
+function migrateV8(db: DatabaseSync): void {
+  logger.info('Running migration v8: TTS settings');
+
+  const columns = db.prepare('PRAGMA table_info(dj_preferences)').all() as { name: string }[];
+
+  if (!columns.some((c) => c.name === 'tts_enabled')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_enabled INTEGER NOT NULL DEFAULT 0`).run();
+  }
+  if (!columns.some((c) => c.name === 'tts_voice')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_voice TEXT`).run();
+  }
+  if (!columns.some((c) => c.name === 'tts_duck_volume')) {
+    db.prepare(`ALTER TABLE dj_preferences ADD COLUMN tts_duck_volume REAL NOT NULL DEFAULT 0.3`).run();
+  }
+
+  setSchemaVersion(db, 8);
+  logger.info('Migration v8 complete');
 }

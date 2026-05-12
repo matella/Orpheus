@@ -1,0 +1,293 @@
+<h2>Client UI Changes — Home Screen + Settings</h2>
+<p class="subtitle">New elements on the home screen and the new DJ Personality section in Settings</p>
+
+<div style="display: flex; gap: 16px;">
+
+  <!-- HOME SCREEN MOCKUP -->
+  <div style="flex: 1;">
+    <div class="mockup">
+      <div class="mockup-header">Home Screen — Now Playing (modified)</div>
+      <div class="mockup-body" style="padding: 0; background: #0d0d0d;">
+
+        <!-- Status bar -->
+        <div style="padding: 8px 16px; background: #111; display: flex; justify-content: space-between; align-items: center; font-size: 11px; border-bottom: 1px solid #222;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="color: #4a8;">● Active</span>
+            <span style="color: #888;">1,247 tracks</span>
+            <span style="color: #888;">MacBook Pro</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="background: #1e2a1e; color: #4a8; padding: 2px 8px; border-radius: 10px; font-size: 10px;">🎧 The Curator</span>
+            <span style="background: #1a1a2e; color: #88aaff; padding: 2px 8px; border-radius: 10px; font-size: 10px;">AI</span>
+          </div>
+        </div>
+
+        <!-- DJ Patter Banner (NEW) -->
+        <div style="margin: 12px 16px; background: linear-gradient(135deg, #1a1a2e 0%, #1e1a2e 100%); border: 1px solid #333; border-radius: 10px; padding: 12px 16px;">
+          <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <div style="font-size: 18px; margin-top: 2px;">💬</div>
+            <div>
+              <div style="color: #D4A843; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">DJ says</div>
+              <div style="color: #ccc; font-size: 13px; line-height: 1.5; font-style: italic;">"That Talking Heads run was building something — let's keep the groove but take it somewhere warmer."</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Album Art -->
+        <div style="margin: 12px 16px; text-align: center;">
+          <div style="width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, #2a3a4a, #1a2a3a); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <div style="font-size: 48px; opacity: 0.4;">🎵</div>
+          </div>
+        </div>
+
+        <!-- Track Info -->
+        <div style="padding: 0 16px; text-align: center;">
+          <div style="color: #fff; font-size: 18px; font-weight: bold; font-family: 'Cinzel', serif;">Genius of Love</div>
+          <div style="color: #aaa; font-size: 14px; margin-top: 4px;">Tom Tom Club</div>
+          <div style="color: #666; font-size: 12px; margin-top: 2px;">Tom Tom Club · 1981</div>
+        </div>
+
+        <!-- Pick Reason (NEW) -->
+        <div style="margin: 10px 16px; text-align: center;">
+          <div style="color: #888; font-size: 12px; font-style: italic; line-height: 1.5;">
+            "Same new wave DNA as Talking Heads — literally the same band members — but looser, funkier groove"
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div style="display: flex; justify-content: center; align-items: center; gap: 24px; padding: 16px;">
+          <div style="width: 40px; height: 40px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa;">⏮</div>
+          <div style="width: 56px; height: 56px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; font-size: 24px;">▶</div>
+          <div style="width: 40px; height: 40px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa;">⏭</div>
+        </div>
+
+        <!-- Feedback -->
+        <div style="display: flex; justify-content: center; gap: 16px; padding-bottom: 12px;">
+          <div style="width: 36px; height: 36px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 16px;">👎</div>
+          <div style="width: 36px; height: 36px; border: 1px solid #4a8; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #4a8; font-size: 16px;">👍</div>
+        </div>
+
+        <!-- Up Next Queue (NEW) -->
+        <div style="margin: 0 16px 12px; background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px;">
+          <div style="color: #D4A843; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Up Next</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="color: #ccc; font-size: 13px;">Tempted</span>
+                <span style="color: #666; font-size: 12px;"> — Squeeze</span>
+              </div>
+              <span style="color: #555; font-size: 11px;">similar</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="color: #ccc; font-size: 13px;">This Must Be the Place</span>
+                <span style="color: #666; font-size: 12px;"> — Talking Heads</span>
+              </div>
+              <span style="color: #555; font-size: 11px;">library</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- FALLBACK STATE -->
+  <div style="flex: 1;">
+    <div class="mockup">
+      <div class="mockup-header">Home Screen — Fallback State</div>
+      <div class="mockup-body" style="padding: 0; background: #0d0d0d;">
+
+        <!-- Status bar - fallback -->
+        <div style="padding: 8px 16px; background: #1a1111; display: flex; justify-content: space-between; align-items: center; font-size: 11px; border-bottom: 1px solid #332222;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="color: #4a8;">● Active</span>
+            <span style="color: #888;">1,247 tracks</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="background: #2a1a1a; color: #e88; padding: 2px 8px; border-radius: 10px; font-size: 10px; animation: pulse 2s infinite;">⚡ Auto-pilot</span>
+          </div>
+        </div>
+
+        <!-- Fallback banner -->
+        <div style="margin: 12px 16px; background: #1a1111; border: 1px solid #442222; border-radius: 10px; padding: 12px 16px;">
+          <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <div style="font-size: 18px; margin-top: 2px;">⚡</div>
+            <div>
+              <div style="color: #e88; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Auto-pilot mode</div>
+              <div style="color: #aaa; font-size: 13px; line-height: 1.5;">AI DJ is offline. Picking tracks algorithmically. Retrying connection...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Album Art -->
+        <div style="margin: 12px 16px; text-align: center;">
+          <div style="width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, #2a2a2a, #1a1a1a); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <div style="font-size: 48px; opacity: 0.4;">🎵</div>
+          </div>
+        </div>
+
+        <!-- Track Info -->
+        <div style="padding: 0 16px; text-align: center;">
+          <div style="color: #fff; font-size: 18px; font-weight: bold; font-family: 'Cinzel', serif;">Ashes to Ashes</div>
+          <div style="color: #aaa; font-size: 14px; margin-top: 4px;">David Bowie</div>
+          <div style="color: #666; font-size: 12px; margin-top: 2px;">Scary Monsters · 1980</div>
+        </div>
+
+        <!-- No pick reason in fallback -->
+        <div style="height: 24px;"></div>
+
+        <!-- Controls (same) -->
+        <div style="display: flex; justify-content: center; align-items: center; gap: 24px; padding: 16px;">
+          <div style="width: 40px; height: 40px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa;">⏮</div>
+          <div style="width: 56px; height: 56px; background: #D4A843; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; font-size: 24px;">▶</div>
+          <div style="width: 40px; height: 40px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa;">⏭</div>
+        </div>
+
+        <!-- Feedback -->
+        <div style="display: flex; justify-content: center; gap: 16px; padding-bottom: 12px;">
+          <div style="width: 36px; height: 36px; border: 1px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 16px;">👎</div>
+          <div style="width: 36px; height: 36px; border: 1px solid #4a8; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #4a8; font-size: 16px;">👍</div>
+        </div>
+
+        <!-- Up Next (no reasons, no source tags) -->
+        <div style="margin: 0 16px 12px; background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px;">
+          <div style="color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Up Next</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div>
+              <span style="color: #ccc; font-size: 13px;">Heroes</span>
+              <span style="color: #666; font-size: 12px;"> — David Bowie</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS: DJ PERSONALITY -->
+  <div style="flex: 1;">
+    <div class="mockup">
+      <div class="mockup-header">Settings → DJ Personality (new section)</div>
+      <div class="mockup-body" style="padding: 16px; background: #0d0d0d;">
+
+        <!-- Section header -->
+        <div style="color: #D4A843; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #222;">🎭 DJ Personality</div>
+
+        <!-- Persona -->
+        <div style="margin-bottom: 16px;">
+          <div style="color: #ccc; font-size: 13px; font-weight: bold; margin-bottom: 6px;">Persona</div>
+          <div style="background: #111; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            <div>
+              <span style="color: #fff; font-size: 14px;">🎧 The Curator</span>
+            </div>
+            <span style="color: #555;">▸</span>
+          </div>
+        </div>
+
+        <!-- Chattiness -->
+        <div style="margin-bottom: 16px;">
+          <div style="color: #ccc; font-size: 13px; font-weight: bold; margin-bottom: 6px;">Chattiness</div>
+          <div style="display: flex; gap: 4px;">
+            <div style="flex:1; background: #111; border: 1px solid #333; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #888; cursor: pointer;">Silent</div>
+            <div style="flex:1; background: #111; border: 1px solid #333; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #888; cursor: pointer;">Minimal</div>
+            <div style="flex:1; background: #1e2a1e; border: 1px solid #4a8; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #4a8; font-weight: bold; cursor: pointer;">Balanced</div>
+            <div style="flex:1; background: #111; border: 1px solid #333; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #888; cursor: pointer;">Chatty</div>
+          </div>
+        </div>
+
+        <!-- Discovery appetite -->
+        <div style="margin-bottom: 16px;">
+          <div style="color: #ccc; font-size: 13px; font-weight: bold; margin-bottom: 6px;">Discovery Appetite</div>
+          <div style="display: flex; gap: 4px;">
+            <div style="flex:1; background: #1e2a1e; border: 1px solid #4a8; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #4a8; font-weight: bold; cursor: pointer;">Comfort</div>
+            <div style="flex:1; background: #111; border: 1px solid #333; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #888; cursor: pointer;">Balanced</div>
+            <div style="flex:1; background: #111; border: 1px solid #333; border-radius: 6px; padding: 8px; text-align: center; font-size: 11px; color: #888; cursor: pointer;">Adventurous</div>
+          </div>
+          <!-- Mini ratio -->
+          <div style="display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 8px;">
+            <div style="flex: 65; background: #4a8;"></div>
+            <div style="flex: 25; background: #3a6a8a;"></div>
+            <div style="flex: 10; background: #8a4a8a;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 10px; color: #666;">
+            <span>Library 65%</span>
+            <span>Similar 25%</span>
+            <span>Discovery 10%</span>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div style="border-top: 1px solid #222; margin: 16px 0;"></div>
+
+        <!-- Voice section (Phase 3 - greyed) -->
+        <div style="color: #555; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px;">🔊 DJ Voice <span style="font-size: 10px; color: #444; font-weight: normal;">(coming soon)</span></div>
+
+        <!-- Engine -->
+        <div style="margin-bottom: 12px; opacity: 0.4;">
+          <div style="color: #888; font-size: 13px; margin-bottom: 6px;">Engine</div>
+          <div style="background: #111; border: 1px solid #222; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #666; font-size: 14px;">Not configured</span>
+            <span style="color: #444;">▸</span>
+          </div>
+        </div>
+
+        <!-- Voice -->
+        <div style="margin-bottom: 12px; opacity: 0.4;">
+          <div style="color: #888; font-size: 13px; margin-bottom: 6px;">Voice</div>
+          <div style="background: #111; border: 1px solid #222; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #666; font-size: 14px;">—</span>
+            <span style="color: #444;">▸</span>
+          </div>
+        </div>
+
+        <!-- Volume -->
+        <div style="opacity: 0.4;">
+          <div style="color: #888; font-size: 13px; margin-bottom: 6px;">Voice Volume</div>
+          <div style="background: #333; height: 4px; border-radius: 2px; position: relative;">
+            <div style="background: #555; width: 60%; height: 100%; border-radius: 2px;"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Key changes callout -->
+<div style="margin-top: 24px; padding: 16px; background: #1a1a2e; border-radius: 8px; border-left: 3px solid #D4A843;">
+  <h3 style="margin-top: 0;">New UI elements summary</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; color: #ccc; font-size: 14px;">
+    <div>
+      <div style="color: #D4A843; font-weight: bold; margin-bottom: 4px;">Home Screen</div>
+      <ul style="line-height: 2; margin: 0; padding-left: 20px;">
+        <li><strong>DJ patter banner</strong> — above album art, shows LLM commentary</li>
+        <li><strong>Pick reason</strong> — below track info, why the DJ chose this track</li>
+        <li><strong>Up Next queue</strong> — shows next 2 tracks with source tag (library/similar/discovery)</li>
+        <li><strong>Persona chip</strong> — status bar shows active persona</li>
+        <li><strong>Fallback indicator</strong> — "Auto-pilot" badge when LLM is offline</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color: #D4A843; font-weight: bold; margin-bottom: 4px;">Settings Screen</div>
+      <ul style="line-height: 2; margin: 0; padding-left: 20px;">
+        <li><strong>DJ Personality section</strong> — persona picker, chattiness toggle, discovery appetite</li>
+        <li><strong>DJ Voice section</strong> (Phase 3) — engine, voice, volume — greyed out until TTS is implemented</li>
+        <li><strong>Ratio visualization</strong> — mini bar + percentages update with appetite selection</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- WebSocket events -->
+<div style="margin-top: 16px; padding: 16px; background: #1a1a2e; border-radius: 8px; border-left: 3px solid #88aaff;">
+  <h3 style="margin-top: 0; color: #88aaff;">New WebSocket events</h3>
+  <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #aaa; line-height: 2.2;">
+    <code style="color: #4a8;">curator_update</code> — { picks: [...], patter: "...", source: "llm" } → update patter banner + queue<br>
+    <code style="color: #4a8;">curator_fallback</code> — { reason: "timeout" | "unavailable" } → show auto-pilot indicator<br>
+    <code style="color: #4a8;">curator_restored</code> — {} → hide auto-pilot, resume DJ mode<br>
+    <code style="color: #888;">state_updated</code> — (existing) extended with curator metadata<br>
+    <code style="color: #888;">track_changed</code> — (existing) extended with pick reason
+  </div>
+</div>
