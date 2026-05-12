@@ -6,6 +6,7 @@ import { getTracksWithFeatures } from '../database/repositories/track.repo.js';
 import { getPreference } from '../database/repositories/preference.repo.js';
 import { getTopArtists } from '../database/repositories/top-artists.repo.js';
 import { getRecommendations } from '../spotify/recommendations.js';
+import type { SpotifyRecommendedTrack } from '../spotify/recommendations.js';
 import { getDb } from '../database/connection.js';
 import type { TrackRow } from '../database/types.js';
 import type { DiscoveryAppetite } from '../database/repositories/dj-preferences.repo.js';
@@ -60,6 +61,25 @@ function shuffled<T>(arr: T[]): T[] {
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
+}
+
+function fromSpotifyRec(
+  t: SpotifyRecommendedTrack,
+  source: 'similar' | 'discovery',
+): CandidateTrack {
+  return {
+    trackId: t.spotifyId,
+    name: t.name,
+    artist: t.artist,
+    year: null,
+    genres: [],
+    source,
+    spotifyUri: t.spotifyUri,
+    artistId: t.artistId,
+    album: t.album ?? undefined,
+    durationMs: t.durationMs,
+    popularity: t.popularity,
+  };
 }
 
 function toCandidate(track: TrackRow, source: 'library' | 'similar' | 'discovery'): CandidateTrack {
@@ -176,35 +196,21 @@ export async function buildCuratorPool(
     );
 
     if (simFiltered.length > 0) {
-      similarBucket = simFiltered.slice(0, simTarget).map((t) => ({
-        trackId: t.spotifyId,
-        name: t.name,
-        artist: t.artist,
-        year: null,
-        genres: [],
-        source: 'similar' as const,
-        spotifyUri: t.spotifyUri,
-        artistId: t.artistId,
-        album: t.album ?? undefined,
-        durationMs: t.durationMs,
-        popularity: t.popularity,
-      }));
+      similarBucket = simFiltered.slice(0, simTarget).map((t) => fromSpotifyRec(t, 'similar'));
     } else {
-      const similarRows = notInLibrary.filter(
-        (t) =>
-          currentGenre &&
-          t.genre_cluster === currentGenre &&
-          !recentArtistSet.has(t.artist.toLowerCase()),
-      );
+      const similarRows = currentGenre
+        ? notInLibrary.filter(
+            (t) => t.genre_cluster === currentGenre && !recentArtistSet.has(t.artist.toLowerCase()),
+          )
+        : notInLibrary.filter((t) => !recentArtistSet.has(t.artist.toLowerCase()));
       similarBucket = shuffled(similarRows).slice(0, simTarget).map((t) => toCandidate(t, 'similar'));
     }
   } else {
-    const similarRows = notInLibrary.filter(
-      (t) =>
-        currentGenre &&
-        t.genre_cluster === currentGenre &&
-        !recentArtistSet.has(t.artist.toLowerCase()),
-    );
+    const similarRows = currentGenre
+      ? notInLibrary.filter(
+          (t) => t.genre_cluster === currentGenre && !recentArtistSet.has(t.artist.toLowerCase()),
+        )
+      : notInLibrary.filter((t) => !recentArtistSet.has(t.artist.toLowerCase()));
     similarBucket = shuffled(similarRows).slice(0, simTarget).map((t) => toCandidate(t, 'similar'));
   }
 
@@ -216,43 +222,36 @@ export async function buildCuratorPool(
     .map((a) => a.spotify_id)
     .filter((id): id is string => Boolean(id));
 
-  const discRecs = await getRecommendations({
-    seedArtistIds: diverseArtistIds,
-    limit: discTarget + 10,
-  });
+  if (discTarget > 0 && diverseArtistIds.length > 0) {
+    const discRecs = await getRecommendations({
+      seedArtistIds: diverseArtistIds,
+      limit: discTarget + 10,
+    });
 
-  const discFiltered = discRecs.filter(
-    (t) =>
-      !existingSpotifyIds.has(t.spotifyId) &&
-      !recentArtistSet.has(t.artist.toLowerCase()),
-  );
-
-  if (discFiltered.length > 0) {
-    discoveryBucket = discFiltered.slice(0, discTarget).map((t) => ({
-      trackId: t.spotifyId,
-      name: t.name,
-      artist: t.artist,
-      year: null,
-      genres: [],
-      source: 'discovery' as const,
-      spotifyUri: t.spotifyUri,
-      artistId: t.artistId,
-      album: t.album ?? undefined,
-      durationMs: t.durationMs,
-      popularity: t.popularity,
-    }));
-  } else {
-    const discoveryFiltered = notInLibrary.filter(
-      (t) => !currentGenre || t.genre_cluster !== currentGenre,
+    const discFiltered = discRecs.filter(
+      (t) =>
+        !existingSpotifyIds.has(t.spotifyId) &&
+        !recentArtistSet.has(t.artist.toLowerCase()),
     );
-    const playCountById = new Map<number, number>();
-    for (const t of discoveryFiltered) {
-      playCountById.set(t.id, getPreference(t.id)?.play_count ?? 0);
+
+    if (discFiltered.length > 0) {
+      discoveryBucket = discFiltered.slice(0, discTarget).map((t) => fromSpotifyRec(t, 'discovery'));
+    } else {
+      const discoveryFiltered = notInLibrary.filter(
+        (t) => !currentGenre || t.genre_cluster !== currentGenre,
+      );
+      const playCountById = new Map<number, number>();
+      for (const t of discoveryFiltered) {
+        playCountById.set(t.id, getPreference(t.id)?.play_count ?? 0);
+      }
+      const discoveryRows = discoveryFiltered.sort(
+        (a, b) => (playCountById.get(a.id) ?? 0) - (playCountById.get(b.id) ?? 0),
+      );
+      discoveryBucket = discoveryRows.slice(0, discTarget).map((t) => toCandidate(t, 'discovery'));
     }
-    const discoveryRows = discoveryFiltered.sort(
-      (a, b) => (playCountById.get(a.id) ?? 0) - (playCountById.get(b.id) ?? 0),
-    );
-    discoveryBucket = discoveryRows.slice(0, discTarget).map((t) => toCandidate(t, 'discovery'));
+  } else {
+    // no seeds or no target — fall straight to DB fallback
+    discoveryBucket = []; // will be padded by library fallback at end if needed
   }
 
   const pool = [...libraryBucket, ...similarBucket, ...discoveryBucket];
