@@ -89,6 +89,11 @@ class ApiService {
     await _dio.post('/playback/resume');
   }
 
+  /// Set Spotify playback volume (0–100).
+  Future<void> setVolume(int volumePercent) async {
+    await _dio.put('/playback/volume', data: {'volumePercent': volumePercent});
+  }
+
   /// Send like feedback
   Future<void> likeTrack({int? trackId}) async {
     await _dio.post('/feedback/like', data: {'trackId': trackId});
@@ -337,6 +342,38 @@ class ApiService {
   Future<Map<String, dynamic>> getAnalyticsDaily({int days = 30}) async {
     final response = await _dio.get('/analytics/daily', queryParameters: {'days': days});
     return response.data;
+  }
+
+  // ── TTS ──────────────────────────────────────────────────────────────────
+
+  /// List available Piper voice models.
+  Future<List<Map<String, dynamic>>> getTtsVoices() async {
+    final response = await _dio.get('/tts/voices');
+    final voices = response.data['voices'] as List<dynamic>? ?? [];
+    return voices.cast<Map<String, dynamic>>();
+  }
+
+  /// Generate a WAV preview for a specific voice. Returns raw bytes.
+  Future<List<int>> previewTtsVoice(String voiceId) async {
+    final response = await _dio.post<List<int>>(
+      '/tts/preview',
+      data: {'voiceId': voiceId},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? [];
+  }
+
+  /// Update TTS settings on the server.
+  Future<void> updateTtsSettings({
+    bool? ttsEnabled,
+    String? ttsVoice,
+    double? ttsDuckVolume,
+  }) async {
+    await _dio.put('/tts/settings', data: {
+      if (ttsEnabled != null) 'ttsEnabled': ttsEnabled,
+      if (ttsVoice != null) 'ttsVoice': ttsVoice,
+      if (ttsDuckVolume != null) 'ttsDuckVolume': ttsDuckVolume,
+    });
   }
 }
 
