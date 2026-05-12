@@ -85,7 +85,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final voices = await apiService.getTtsVoices();
       setState(() {
         _ttsVoices = voices;
-        _ttsAvailable = voices.isNotEmpty || _ttsEnabled;
+        _ttsAvailable = true;
       });
     } catch (_) {
       setState(() => _ttsAvailable = false);
@@ -654,6 +654,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             divisions: 20,
             activeColor: OrpheusColors.lyreGold,
             inactiveColor: OrpheusColors.slate,
+            semanticFormatterCallback: (v) => '${(v * 100).round()}% music volume during speech',
             onChanged: (v) => setState(() => _ttsDuckVolume = v),
             onChangeEnd: (v) {
               apiService.updateTtsSettings(ttsDuckVolume: v).catchError((_) {});
