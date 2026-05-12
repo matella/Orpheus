@@ -7,6 +7,7 @@ import '../config/theme.dart';
 import '../providers/dj_provider.dart';
 import '../providers/steering_provider.dart';
 import '../services/api_service.dart';
+import '../services/tts_service.dart';
 import '../services/websocket_service.dart';
 import '../widgets/now_playing_card.dart';
 import '../widgets/feedback_buttons.dart';
@@ -248,6 +249,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           });
         case 'curator_update':
           ref.read(djProvider.notifier).onCuratorUpdate(data);
+          final patter = data['patter'] as String? ?? '';
+          final prefs = ref.read(djProvider).preferences;
+          if (patter.isNotEmpty && prefs.ttsEnabled && prefs.chattiness != 'silent') {
+            ttsService.speakPatter(patter, prefs.ttsDuckVolume).catchError((_) {});
+          }
         case 'curator_fallback':
           ref.read(djProvider.notifier).onCuratorFallback(data);
         case 'curator_restored':
