@@ -37,3 +37,4 @@ client/.flutter-plugins-dependencies
 client/.packages
 client/.pub-cache/
 client/.pub/
+.worktrees/
