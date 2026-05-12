@@ -104,8 +104,8 @@ export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'volumePercent (number) is required' });
     }
     try {
-      await setVolume(volumePercent);
-      return reply.send({ volumePercent: Math.max(0, Math.min(100, Math.round(volumePercent))) });
+      const applied = await setVolume(volumePercent);
+      return reply.send({ volumePercent: applied });
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to set volume' });
     }
