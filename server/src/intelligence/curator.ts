@@ -16,6 +16,12 @@ import { buildCuratorPool } from './pool-builder.js';
 import { stateVectorManager } from './state-vector.js';
 import type { PlaybackTrack } from '../playback/types.js';
 import { getDb } from '../database/connection.js';
+import { getTrackAudioFeatures } from '../spotify/recommendations.js';
+import {
+  getTrackBySpotifyId,
+  upsertTrack,
+  updateAudioFeatures,
+} from '../database/repositories/track.repo.js';
 import { logger } from '../shared/logger.js';
 
 const CURATOR_TIMEOUT_MS = 15_000;
@@ -173,11 +179,12 @@ class DjCurator extends EventEmitter {
       currentTrack ? { name: currentTrack.name, artist: currentTrack.artist } : undefined,
     );
 
-    const pool = buildCuratorPool(
+    const pool = await buildCuratorPool(
       sessionId,
       ctx.discoveryAppetite,
       this.recentTrackIds,
       this.recentArtists,
+      currentTrack ? { spotifyId: currentTrack.spotifyId } : null,
     );
 
     if (pool.length < 3) {
@@ -220,7 +227,7 @@ class DjCurator extends EventEmitter {
       return this._handleFallback('timeout', fallbackFn);
     }
 
-    const picks = this._validateAndResolvePicks(raw, pool, currentTrack ?? null, sessionId);
+    const picks = await this._validateAndResolvePicks(raw, pool, currentTrack ?? null, sessionId);
 
     // Artist dedup inside _validateAndResolvePicks can trim one pick — tolerate 2
     if (picks.length < 2) {
@@ -253,12 +260,12 @@ class DjCurator extends EventEmitter {
 
   // ── Private ─────────────────────────────────────────────────────────
 
-  private _validateAndResolvePicks(
+  private async _validateAndResolvePicks(
     raw: CurationResult,
     pool: CandidateTrack[],
     currentTrack: PlaybackTrack | null,
     sessionId: number,
-  ): CuratorPick[] {
+  ): Promise<CuratorPick[]> {
     const poolById = new Map(pool.map((t) => [t.trackId, t]));
     const used = new Set<string>();
     const picks: CuratorPick[] = [];
@@ -268,7 +275,9 @@ class DjCurator extends EventEmitter {
       if (!tid || !poolById.has(tid) || used.has(tid)) continue;
 
       const candidateTrack = poolById.get(tid)!;
-      const dbRow = getTrackById(Number(tid));
+      const dbRow = candidateTrack.spotifyUri
+        ? await this._resolveExternalTrack(tid, candidateTrack)
+        : getTrackById(Number(tid));
       if (!dbRow) continue;
 
       dbRow.source = candidateTrack.source;
@@ -277,12 +286,13 @@ class DjCurator extends EventEmitter {
       if (picks.length === 3) break;
     }
 
-    // Backfill if the LLM hallucinated or deduped fewer than 3
+    // Backfill if the LLM hallucinated or deduped fewer than 3 (library tracks only)
     if (picks.length < 3) {
       const usedDbIds = new Set(picks.map((p) => p.track.id));
       for (const candidate of pool) {
         if (picks.length >= 3) break;
         if (used.has(candidate.trackId)) continue;
+        if (candidate.spotifyUri) continue; // external candidates can't be backfilled
         const dbRow = getTrackById(Number(candidate.trackId));
         if (!dbRow || usedDbIds.has(dbRow.id)) continue;
         dbRow.source = candidate.source;
@@ -304,6 +314,63 @@ class DjCurator extends EventEmitter {
       // Allow if only 1 occurrence, or if the LLM reason mentions intentionality
       return count === 0 || p.reason.toLowerCase().includes('callback') || p.reason.toLowerCase().includes('intentional');
     });
+  }
+
+  private async _resolveExternalTrack(
+    spotifyId: string,
+    candidate: CandidateTrack,
+  ): Promise<PlaybackTrack | null> {
+    try {
+      const existing = getTrackBySpotifyId(spotifyId);
+      if (existing) {
+        if (existing.features_fetched) {
+          return trackRowToPlayback(existing as Parameters<typeof trackRowToPlayback>[0], candidate.source);
+        }
+        // Row exists but has no audio features — try fetching them now
+      } else {
+        upsertTrack({
+          spotifyId,
+          name: candidate.name,
+          artist: candidate.artist,
+          artistId: candidate.artistId,
+          album: candidate.album,
+          durationMs: candidate.durationMs || 180_000,
+          source: 'external',
+        });
+      }
+
+      const features = await getTrackAudioFeatures(spotifyId);
+      if (
+        features &&
+        features.energy !== null && features.valence !== null && features.tempo !== null &&
+        features.danceability !== null && features.acousticness !== null &&
+        features.instrumentalness !== null && features.loudness !== null &&
+        features.speechiness !== null && features.key !== null &&
+        features.mode !== null && features.timeSignature !== null
+      ) {
+        updateAudioFeatures({
+          spotifyId,
+          energy: features.energy,
+          valence: features.valence,
+          tempo: features.tempo,
+          danceability: features.danceability,
+          acousticness: features.acousticness,
+          instrumentalness: features.instrumentalness,
+          loudness: features.loudness,
+          speechiness: features.speechiness,
+          key: features.key,
+          mode: features.mode,
+          timeSignature: features.timeSignature,
+        });
+      }
+
+      const saved = getTrackBySpotifyId(spotifyId);
+      if (!saved) return null;
+      return trackRowToPlayback(saved as Parameters<typeof trackRowToPlayback>[0], candidate.source);
+    } catch (err) {
+      logger.warn({ err, spotifyId }, 'Failed to resolve external track — skipping');
+      return null;
+    }
   }
 
   private _smoothTransitions(

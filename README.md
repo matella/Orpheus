@@ -11,7 +11,7 @@ Orpheus is a self-driving music system that connects to your Spotify account and
 Orpheus runs as a local server that controls Spotify playback on your behalf. When a session starts, the system:
 
 1. **Infers initial state** from time-of-day preferences, recent history, and (optionally) an LLM context inference
-2. **Builds a candidate pool** from your cached Spotify library, filtering by energy, genre, tempo, and recency
+2. **Builds a candidate pool** from your Spotify library plus real-time external recommendations (similar tracks seeded by the current track, discovery tracks seeded by top artists) — external picks are saved to the local DB automatically
 3. **Scores candidates** against the current state vector using a weighted multi-dimensional distance function
 4. **Selects a track** via weighted random sampling (top candidates weighted by inverse distance)
 5. **Observes your response** — completions, skips, likes, dislikes — and blends feedback into the state using exponential moving averages
