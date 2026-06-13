@@ -9,6 +9,15 @@ import { broadcast } from '../websocket.js';
 import { logger } from '../../shared/logger.js';
 
 export async function playbackRoutes(fastify: FastifyInstance): Promise<void> {
+
+  /**
+   * GET /api/playback/now
+   * Live Spotify playback (ce que l'utilisateur ecoute reellement), independant de l'engine.
+   * Utilise par le widget musique OBS de storm-codex.
+   */
+  fastify.get('/now', async () => {
+    return (await getPlayerState()) ?? null;
+  });
   /**
    * GET /api/playback/current
    * Get current playback state including current and next track.
