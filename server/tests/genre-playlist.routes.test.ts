@@ -10,9 +10,11 @@ vi.mock('../src/spotify/player.js', () => ({
 vi.mock('../src/spotify/artist-genre-sync.js', async (orig) => ({
   ...(await orig<typeof import('../src/spotify/artist-genre-sync.js')>()),
   runArtistGenreSync: vi.fn().mockResolvedValue(0),
+  isGenreSyncRunning: vi.fn().mockReturnValue(false),
 }));
 
 import { createSpotifyPlaylist, addTracksToPlaylist } from '../src/spotify/player.js';
+import { runArtistGenreSync, isGenreSyncRunning } from '../src/spotify/artist-genre-sync.js';
 import { PlaylistPartialError } from '../src/shared/errors.js';
 import { errorHandler } from '../src/api/middleware/error-handler.js';
 import { libraryRoutes, genrePlaylistRoutes } from '../src/api/routes/genre-playlist.routes.js';
@@ -37,6 +39,8 @@ beforeEach(() => {
   db = createTestDb();
   vi.mocked(createSpotifyPlaylist).mockReset();
   vi.mocked(addTracksToPlaylist).mockReset();
+  vi.mocked(runArtistGenreSync).mockClear();
+  vi.mocked(isGenreSyncRunning).mockReturnValue(false);
 });
 
 function kpopTrack(spotifyId: string): number {
@@ -55,6 +59,34 @@ describe('GET /api/library/genres', () => {
     const body = res.json();
     expect(body.families[0]).toMatchObject({ id: 'k-pop', trackCount: 1 });
     expect(body.genreSyncProgress).toEqual({ done: 1, total: 1, running: false });
+  });
+});
+
+describe('POST /api/library/genres/sync', () => {
+  it('starts the sync in the background and returns 202', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/library/genres/sync' });
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ started: true });
+    expect(runArtistGenreSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('409 when a sync is already running', async () => {
+    vi.mocked(isGenreSyncRunning).mockReturnValue(true);
+    const res = await app.inject({ method: 'POST', url: '/api/library/genres/sync' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('SYNC_IN_PROGRESS');
+    expect(runArtistGenreSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/library/artists', () => {
+  it('searches artists on liked tracks; an empty query returns none', async () => {
+    kpopTrack('t1');
+    const hit = await app.inject({ method: 'GET', url: '/api/library/artists?q=AES' });
+    expect(hit.statusCode).toBe(200);
+    expect(hit.json()).toEqual({ artists: [{ artistId: 'aespa', name: 'aespa', trackCount: 1 }] });
+    const empty = await app.inject({ method: 'GET', url: '/api/library/artists?q=' });
+    expect(empty.json()).toEqual({ artists: [] });
   });
 });
 
@@ -136,5 +168,22 @@ describe('POST /api/genre-playlists/export', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ partial: true, addedCount: 0, spotifyPlaylistUrl: 'u' });
+  });
+
+  it('409 while another export is in progress', async () => {
+    const a = kpopTrack('a');
+    let release!: (v: { id: string; url: string }) => void;
+    vi.mocked(createSpotifyPlaylist).mockImplementation(() => new Promise((r) => { release = r; }));
+    vi.mocked(addTracksToPlaylist).mockResolvedValue(1);
+
+    const first = app.inject({ method: 'POST', url: '/api/genre-playlists/export', payload: payload([a]) });
+    await vi.waitFor(() => expect(createSpotifyPlaylist).toHaveBeenCalled());
+
+    const second = await app.inject({ method: 'POST', url: '/api/genre-playlists/export', payload: payload([a]) });
+    expect(second.statusCode).toBe(409);
+    expect(second.json().error).toBe('EXPORT_IN_PROGRESS');
+
+    release({ id: 'pl1', url: 'u' });
+    expect((await first).statusCode).toBe(200);
   });
 });
