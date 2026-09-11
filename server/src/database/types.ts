@@ -25,6 +25,8 @@ export interface TrackRow {
   source: string;
   cached_at: string;
   features_fetched: number;
+  liked_at: string | null;
+  features_source: 'spotify' | 'default' | null;
 }
 
 export interface InteractionRow {

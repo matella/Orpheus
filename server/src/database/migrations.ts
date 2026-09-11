@@ -1,48 +1,25 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../shared/logger.js';
 
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
 
 /**
- * Run all database migrations.
+ * Run all database migrations up to `targetVersion` (default: latest).
+ * `targetVersion` exists so tests can build an older schema.
  */
-export function runMigrations(db: DatabaseSync): void {
+export function runMigrations(db: DatabaseSync, targetVersion: number = CURRENT_VERSION): void {
   const version = getSchemaVersion(db);
-  logger.info({ currentVersion: version, targetVersion: CURRENT_VERSION }, 'Checking database schema');
+  logger.info({ currentVersion: version, targetVersion }, 'Checking database schema');
 
-  if (version < 1) {
-    migrateV1(db);
+  const steps: [number, (db: DatabaseSync) => void][] = [
+    [1, migrateV1], [2, migrateV2], [3, migrateV3], [4, migrateV4], [5, migrateV5],
+    [6, migrateV6], [7, migrateV7], [8, migrateV8], [9, migrateV9],
+  ];
+  for (const [v, migrate] of steps) {
+    if (version < v && targetVersion >= v) migrate(db);
   }
 
-  if (version < 2) {
-    migrateV2(db);
-  }
-
-  if (version < 3) {
-    migrateV3(db);
-  }
-
-  if (version < 4) {
-    migrateV4(db);
-  }
-
-  if (version < 5) {
-    migrateV5(db);
-  }
-
-  if (version < 6) {
-    migrateV6(db);
-  }
-
-  if (version < 7) {
-    migrateV7(db);
-  }
-
-  if (version < 8) {
-    migrateV8(db);
-  }
-
-  logger.info({ version: CURRENT_VERSION }, 'Database schema up to date');
+  logger.info({ version: Math.min(targetVersion, CURRENT_VERSION) }, 'Database schema up to date');
 }
 
 function getSchemaVersion(db: DatabaseSync): number {
@@ -425,4 +402,66 @@ function migrateV8(db: DatabaseSync): void {
 
   setSchemaVersion(db, 8);
   logger.info('Migration v8 complete');
+}
+
+function migrateV9(db: DatabaseSync): void {
+  logger.info('Running migration v9: liked dates, track artists, artist genres');
+
+  const columns = db.prepare('PRAGMA table_info(tracks)').all() as { name: string }[];
+  if (!columns.some((c) => c.name === 'liked_at')) {
+    db.prepare('ALTER TABLE tracks ADD COLUMN liked_at TEXT').run();
+  }
+  if (!columns.some((c) => c.name === 'features_source')) {
+    db.prepare('ALTER TABLE tracks ADD COLUMN features_source TEXT').run();
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tracks_liked_at ON tracks(liked_at);
+
+    CREATE TABLE IF NOT EXISTS artists (
+      artist_id         TEXT PRIMARY KEY,
+      name              TEXT NOT NULL,
+      genres_fetched_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS artist_genres (
+      artist_id TEXT NOT NULL REFERENCES artists(artist_id) ON DELETE CASCADE,
+      genre     TEXT NOT NULL,
+      PRIMARY KEY (artist_id, genre)
+    );
+    CREATE INDEX IF NOT EXISTS idx_artist_genres_genre ON artist_genres(genre);
+
+    CREATE TABLE IF NOT EXISTS track_artists (
+      track_id  INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+      artist_id TEXT NOT NULL,
+      position  INTEGER NOT NULL,
+      PRIMARY KEY (track_id, artist_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_track_artists_artist ON track_artists(artist_id);
+  `);
+
+  // Neutral defaults come from markTracksWithDefaultFeatures(); anything else came from Spotify.
+  db.prepare(`
+    UPDATE tracks SET features_source = CASE
+      WHEN energy = 0.5 AND valence = 0.5 AND tempo = 120 AND danceability = 0.5
+       AND acousticness = 0.5 AND instrumentalness = 0.1 AND loudness = -10 AND speechiness = 0.1
+      THEN 'default' ELSE 'spotify' END
+    WHERE features_fetched = 1 AND features_source IS NULL
+  `).run();
+
+  // Backfill primary artists; names are approximated (first comma segment) until the next sync.
+  db.prepare(`
+    INSERT OR IGNORE INTO artists (artist_id, name)
+    SELECT artist_id,
+           TRIM(CASE WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1) ELSE artist END)
+    FROM tracks WHERE artist_id IS NOT NULL
+    GROUP BY artist_id
+  `).run();
+  db.prepare(`
+    INSERT OR IGNORE INTO track_artists (track_id, artist_id, position)
+    SELECT id, artist_id, 0 FROM tracks WHERE artist_id IS NOT NULL
+  `).run();
+
+  setSchemaVersion(db, 9);
+  logger.info('Migration v9 complete');
 }

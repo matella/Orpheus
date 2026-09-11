@@ -60,3 +60,11 @@ export function closeDb(): void {
     logger.info('Database connection closed');
   }
 }
+
+/**
+ * Test-only: install an already-open connection (e.g. an in-memory DB).
+ * Pass null to clear it.
+ */
+export function setDbForTesting(conn: DatabaseSync | null): void {
+  db = conn;
+}
