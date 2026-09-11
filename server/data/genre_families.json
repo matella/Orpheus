@@ -1,0 +1,27 @@
+{
+  "families": [
+    { "id": "k-pop", "label": "K-pop", "patterns": ["k-pop", "kpop", "korean", "k-rap", "k-indie", "k-rock", "k-ballad", "k-r&b", "k-hip hop"] },
+    { "id": "j-pop", "label": "J-pop", "patterns": ["j-pop", "jpop", "japanese", "anime", "j-rock", "j-rap", "city pop", "vocaloid"] },
+    { "id": "c-pop", "label": "C-pop", "patterns": ["c-pop", "mandopop", "cantopop", "chinese", "taiwanese"] },
+    { "id": "latin", "label": "Latin", "patterns": ["latin", "reggaeton", "urbano", "bachata", "salsa", "cumbia", "corrido", "dembow", "sertanejo", "funk carioca"] },
+    { "id": "lo-fi", "label": "Lo-fi", "patterns": ["lo-fi", "lofi", "chillhop"] },
+    { "id": "hip-hop", "label": "Hip-hop", "patterns": ["hip hop", "hip-hop", "rap", "trap", "drill", "grime", "boom bap"] },
+    { "id": "r&b", "label": "R&B", "patterns": ["r&b", "rnb", "neo soul", "new jack swing"] },
+    { "id": "soul-funk", "label": "Soul & Funk", "patterns": ["soul", "funk", "motown", "disco"] },
+    { "id": "metal", "label": "Metal", "patterns": ["metal", "metalcore", "deathcore", "djent", "grindcore"] },
+    { "id": "punk", "label": "Punk", "patterns": ["punk", "emo", "hardcore", "screamo"] },
+    { "id": "house", "label": "House", "patterns": ["house"] },
+    { "id": "techno", "label": "Techno", "patterns": ["techno", "trance", "hardstyle"] },
+    { "id": "electronic", "label": "Electronic", "patterns": ["edm", "electro", "dubstep", "drum and bass", "dnb", "future bass", "synthwave", "idm", "garage", "bass music"] },
+    { "id": "ambient", "label": "Ambient", "patterns": ["ambient", "new age", "drone", "meditation"] },
+    { "id": "jazz", "label": "Jazz", "patterns": ["jazz", "bebop", "swing", "bossa nova"] },
+    { "id": "classical", "label": "Classical", "patterns": ["classical", "orchestra", "baroque", "opera", "romantic era", "soundtrack", "score", "compositional"] },
+    { "id": "country", "label": "Country", "patterns": ["country", "bluegrass", "americana", "honky tonk"] },
+    { "id": "folk", "label": "Folk", "patterns": ["folk", "singer-songwriter", "acoustic"] },
+    { "id": "blues", "label": "Blues", "patterns": ["blues"] },
+    { "id": "reggae", "label": "Reggae", "patterns": ["reggae", "dancehall", "ska", "dub"] },
+    { "id": "indie", "label": "Indie", "patterns": ["indie", "shoegaze", "dream pop", "bedroom pop", "lo-fi indie"] },
+    { "id": "rock", "label": "Rock", "patterns": ["rock", "grunge", "britpop", "post-punk", "new wave"] },
+    { "id": "pop", "label": "Pop", "patterns": ["pop", "dance pop", "boy band", "girl group"] }
+  ]
+}

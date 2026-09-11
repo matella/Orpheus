@@ -10,6 +10,7 @@ import { registerMetadataInferenceTask } from './scheduler/tasks/infer-metadata.
 import { startScheduler } from './scheduler/scheduler.js';
 import { engine } from './playback/engine.js';
 import { loadKnowledgeFiles } from './ai/knowledge.js';
+import { loadGenreFamilies } from './intelligence/genre-families.js';
 
 async function main() {
   logger.info('');
@@ -22,6 +23,7 @@ async function main() {
 
   // Load AI knowledge files (genre aliases, mood mappings)
   loadKnowledgeFiles();
+  loadGenreFamilies();
 
   // Start API server
   await startServer();
