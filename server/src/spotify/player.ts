@@ -199,6 +199,7 @@ export async function addTracksToPlaylist(
         body: JSON.stringify({ uris: batch }),
       });
     } catch (err) {
+      if (added === 0) throw err;
       const status = err instanceof SpotifyApiError ? err.statusCode : 502;
       throw new PlaylistPartialError(
         `Failed adding items to playlist ${playlistId} after ${added} tracks: ${(err as Error).message}`,

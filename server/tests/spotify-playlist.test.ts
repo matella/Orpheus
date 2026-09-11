@@ -54,4 +54,16 @@ describe('addTracksToPlaylist', () => {
     expect(err).toBeInstanceOf(PlaylistPartialError);
     expect(err.addedCount).toBe(100);
   });
+
+  it('rethrows the original error when the first batch fails (0 tracks added)', async () => {
+    fetchMock.mockRejectedValueOnce(new SpotifyApiError('unauthorized', 401));
+    const uris = Array.from({ length: 50 }, (_, i) => `spotify:track:${i}`);
+
+    const err = await addTracksToPlaylist('pl1', uris).catch((e) => e);
+
+    expect(err).not.toBeInstanceOf(PlaylistPartialError);
+    expect(err).toBeInstanceOf(SpotifyApiError);
+    expect(err.statusCode).toBe(401);
+    expect(err.message).toBe('unauthorized');
+  });
 });

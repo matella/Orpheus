@@ -307,17 +307,6 @@ export function getRandomTracks(limit: number, excludeIds?: Set<number>): TrackR
 }
 
 /**
- * Get distinct artist IDs for tracks that don't have a genre_cluster set.
- */
-export function getArtistIdsMissingGenres(limit: number = 50): string[] {
-  const db = getDb();
-  const rows = db.prepare(
-    'SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL AND genre_cluster IS NULL LIMIT ?',
-  ).all(limit) as { artist_id: string }[];
-  return rows.map((r) => r.artist_id);
-}
-
-/**
  * Set genre_cluster for all tracks by a given artist (only where genre is currently NULL).
  */
 export function setGenreClusterByArtist(artistId: string, genre: string): number {

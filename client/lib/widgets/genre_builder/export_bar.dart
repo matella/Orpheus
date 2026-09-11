@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../config/theme.dart';
+import '../../models/genre_builder_models.dart';
 import '../../providers/genre_builder_provider.dart';
 import '../spotify_attribution.dart';
 import 'track_preview_list.dart' show formatDuration;
@@ -16,6 +17,7 @@ class ExportBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final overLimit = selectedCount > kMaxPlaylistTracks;
     return SafeArea(
       top: false,
       child: Padding(
@@ -23,9 +25,13 @@ class ExportBar extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: selectedCount > 0 ? onCreate : null,
+            onPressed: overLimit ? null : (selectedCount > 0 ? onCreate : null),
             icon: const Icon(Icons.playlist_add_rounded),
-            label: Text('Create · $selectedCount tracks · ${formatDuration(selectedDurationMs)}'),
+            label: Text(
+              overLimit
+                  ? 'Max $kMaxPlaylistTracks tracks (Spotify limit) · $selectedCount selected'
+                  : 'Create · $selectedCount tracks · ${formatDuration(selectedDurationMs)}',
+            ),
             style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
           ),
         ),

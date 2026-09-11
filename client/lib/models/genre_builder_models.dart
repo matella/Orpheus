@@ -1,5 +1,8 @@
 import 'dart:math';
 
+/// Spotify's hard limit on playlist size; the server rejects exports above this.
+const int kMaxPlaylistTracks = 10000;
+
 class GenreCount {
   final String name;
   final int trackCount;

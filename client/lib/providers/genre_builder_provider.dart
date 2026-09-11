@@ -325,8 +325,13 @@ class GenreBuilderNotifier extends Notifier<GenreBuilderState> {
 
   Future<List<PreviewArtist>> searchArtists(String query) async {
     if (query.trim().isEmpty) return const [];
-    final raw = await apiService.searchLibraryArtists(query.trim());
-    return raw.map((a) => PreviewArtist.fromJson(a as Map<String, dynamic>)).toList();
+    try {
+      final raw = await apiService.searchLibraryArtists(query.trim());
+      return raw.map((a) => PreviewArtist.fromJson(a as Map<String, dynamic>)).toList();
+    } catch (e) {
+      state = state.copyWith(previewError: _errorText(e));
+      return const [];
+    }
   }
 
   Future<void> forceArtist(PreviewArtist artist) async {
@@ -361,6 +366,10 @@ class GenreBuilderNotifier extends Notifier<GenreBuilderState> {
     }
     final ids = state.derived.candidates.map((t) => t.id).toList();
     if (ids.isEmpty) return;
+    if (ids.length > kMaxPlaylistTracks) {
+      state = state.copyWith(previewError: 'Smooth ordering is limited to $kMaxPlaylistTracks tracks');
+      return;
+    }
     try {
       final ordered = await apiService.orderTracksSmooth(ids);
       state = state.copyWith(sort: TrackSort.smooth, smoothOrder: ordered);
@@ -376,6 +385,13 @@ class GenreBuilderNotifier extends Notifier<GenreBuilderState> {
   Future<void> exportPlaylist({required String name, required String description, required bool isPublic}) async {
     final ids = state.derived.selected.map((t) => t.id).toList();
     if (ids.isEmpty) return;
+    if (ids.length > kMaxPlaylistTracks) {
+      state = state.copyWith(
+        exportStatus: ExportStatus.error,
+        exportError: 'Spotify playlists are limited to $kMaxPlaylistTracks tracks',
+      );
+      return;
+    }
     state = state.copyWith(
       exportStatus: ExportStatus.exporting,
       exportAdded: 0,
