@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../config/theme.dart';
 import '../providers/playlist_provider.dart';
+import '../widgets/genre_builder/genre_playlist_builder.dart';
 import '../widgets/spotify_attribution.dart';
 
 const _energyArcOptions = [
@@ -23,6 +24,7 @@ class PlaylistScreen extends ConsumerStatefulWidget {
 
 class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   final _promptController = TextEditingController();
+  String _mode = 'prompt';
 
   // Settings
   double _durationMinutes = 30;
@@ -75,12 +77,31 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         ),
       ),
       body: SafeArea(
-        child: switch (state.status) {
-          PlaylistGenerationStatus.idle => _buildForm(),
-          PlaylistGenerationStatus.generating => _buildProgress(state),
-          PlaylistGenerationStatus.complete => _buildResult(state),
-          PlaylistGenerationStatus.error => _buildError(state),
-        },
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'prompt', label: Text('From a prompt'), icon: Icon(Icons.auto_awesome, size: 16)),
+                  ButtonSegment(value: 'genre', label: Text('By genre'), icon: Icon(Icons.category_rounded, size: 16)),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (v) => setState(() => _mode = v.first),
+              ),
+            ),
+            Expanded(
+              child: _mode == 'genre'
+                  ? const GenrePlaylistBuilder()
+                  : switch (state.status) {
+                      PlaylistGenerationStatus.idle => _buildForm(),
+                      PlaylistGenerationStatus.generating => _buildProgress(state),
+                      PlaylistGenerationStatus.complete => _buildResult(state),
+                      PlaylistGenerationStatus.error => _buildError(state),
+                    },
+            ),
+          ],
+        ),
       ),
     );
   }
