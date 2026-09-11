@@ -23,6 +23,10 @@ describe('classifyGenre', () => {
     ['melodic drill', 'hip-hop'],
     ['deep house', 'house'],
     ['modern rock', 'rock'],
+    ['post-punk', 'punk'],
+    ['lo-fi indie', 'lo-fi'],
+    ['garage rock', 'rock'],
+    ['uk garage', 'electronic'],
   ])('%s → %s', (genre, family) => {
     expect(classifyGenre(genre)).toBe(family);
   });
