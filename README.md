@@ -154,6 +154,14 @@ Flutter Client (Dart)          Node.js Server (TypeScript)
 - Real-time WebSocket progress events during generation
 - Playlist history with full track lists, scores, and metadata
 
+### Genre Playlists
+- Build a Spotify playlist from your Liked Songs by genre family (e.g. every K-pop track among thousands of likes) — no track cap
+- Families group Spotify sub-genres (K-pop = k-pop girl group, k-pop boy group, k-rap…); uncheck sub-genres individually
+- A track matches through any of its artists, so featurings count
+- Preview before creating: uncheck tracks, exclude or force-add artists, filter by liked date, limit the count, sort (date liked, artist, title, shuffle, smooth transitions when audio features exist)
+- Side-panel layout on desktop/web, stacked on mobile
+- Artist genres sync in the background (one artist at a time, resumable) with live progress
+
 ### AI Integration (Optional)
 - Powered by Ollama running locally (default model: llama3.2)
 - **Rich System Prompt:** Three-level system prompt architecture (`full`/`light`/`minimal`) with music expert persona, genre normalization, mood mappings, and output format rules
@@ -248,6 +256,13 @@ All routes are prefixed with `/api`.
 | Playlists | `/playlists` | GET | List playlist history (paginated) |
 | Playlists | `/playlists/:id` | GET | Get playlist with tracks |
 | Playlists | `/playlists/:id` | DELETE | Delete playlist from local DB |
+| Library | `/library/genres` | GET | Genre families + counts over Liked Songs, sync progress |
+| Library | `/library/genres/sync` | POST | Start artist-genre sync (409 if running) |
+| Library | `/library/artists?q=` | GET | Search artists on liked tracks |
+| Library | `/library/artists/:artistId/liked-tracks` | GET | All liked tracks of an artist |
+| Genre Playlists | `/genre-playlists/preview` | POST | Uncapped liked-track preview for genre filters |
+| Genre Playlists | `/genre-playlists/order` | POST | Smooth-transition ordering of track ids |
+| Genre Playlists | `/genre-playlists/export` | POST | Create a Spotify playlist from ordered track ids |
 | DJ | `/dj/preferences` | GET | Get DJ preferences |
 | DJ | `/dj/preferences` | PUT | Update DJ preferences (partial) |
 | DJ | `/dj/onboarding` | GET | Get onboarding completion status |
@@ -276,7 +291,7 @@ Music/
         websocket.ts          # WebSocket broadcast infrastructure
       database/
         connection.ts         # SQLite connection (node:sqlite)
-        migrations.ts         # Schema v1-v8
+        migrations.ts         # Schema v1-v9
         repositories/         # track, interaction, session, preference,
                               # state-history, analytics, settings,
                               # time-preferences, ai-suggestion,
@@ -294,6 +309,9 @@ Music/
         coherence.ts          # Queue coherence analysis
         request-handler.ts    # Natural language request processing
         playlist-generator.ts # AI-enhanced playlist generation pipeline
+        genre-families.ts     # Genre family classification
+        genre-playlist.ts     # Genre builder service
+        track-ordering.ts     # Greedy nearest-neighbor ordering
         curator.ts            # DJ curator LLM orchestrator
         listener-context.ts   # LLM context assembler
         pool-builder.ts       # Library/similar/discovery ratio pool
@@ -320,6 +338,7 @@ Music/
         client.ts             # Authenticated Spotify SDK wrapper
         library.ts            # Library sync operations
         player.ts             # Playback control operations (includes setVolume)
+        artist-genre-sync.ts  # Artist genre background sync
         types.ts              # Spotify type definitions
       tts/
         adapter.ts            # TtsAdapter interface + Voice type
@@ -339,11 +358,14 @@ Music/
         constants.dart        # API base URL, app constants
         routes.dart           # go_router configuration
         theme.dart            # Orpheus dark theme, colors, typography
+      models/
+        genre_builder_models.dart # Genre playlist builder data models
       providers/
         session_provider.dart # Session state management
         steering_provider.dart# Steering control state
         playlist_provider.dart# Playlist generation state + WS progress
         dj_provider.dart      # DJ curator preferences + patter/Up Next state
+        genre_builder_provider.dart # Genre playlist builder state
       screens/
         home_screen.dart      # Now playing, DJ patter, Up Next, persona chip
         session_screen.dart   # Session history, energy curves
@@ -367,6 +389,7 @@ Music/
         stat_card.dart        # Metric card with sparkline
         spotify_attribution.dart # Spotify branding attribution widget
         steering_slider.dart  # Steering control slider
+        genre_builder/        # Genre playlist builder UI components
       main.dart               # Flutter app entry point
     pubspec.yaml              # Flutter dependencies
 ```
@@ -375,7 +398,7 @@ Music/
 
 ## Database Schema
 
-SQLite with 8 migration versions:
+SQLite with 9 migration versions:
 
 - **v1:** Core tables — `tracks`, `interactions`, `sessions`, `preferences`, `state_history`, `steering_history`, `time_preferences`, `analytics_cache`, `settings`, `auth_tokens`
 - **v2:** AI support — `ai_suggestions` table, AI-related settings
@@ -385,6 +408,7 @@ SQLite with 8 migration versions:
 - **v6:** AI genre inference — `genre_source` column on `tracks` (`spotify` | `ai` | `ai_failed`)
 - **v7:** DJ Curator — `dj_preferences` single-row table (persona, chattiness, discovery_appetite, custom_persona, onboarding_completed). `CHECK (id = 1)` enforces single-row invariant.
 - **v8:** DJ Voice — `tts_enabled`, `tts_voice`, `tts_duck_volume` columns on `dj_preferences`.
+- **v9:** Genre playlists — `tracks.liked_at` (Liked Songs date, cleared when un-liked), `tracks.features_source` (`spotify` | `default`), `artists`, `artist_genres` (all Spotify genres per artist), `track_artists` (every artist of a track, in order)
 
 ---
 
