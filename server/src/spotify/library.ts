@@ -15,8 +15,11 @@ import {
   getTrackBySpotifyId,
   getArtistIdsMissingGenres,
   setGenreClusterByArtist,
+  upsertLikedTracks,
+  clearUnlikedTracks,
   type UpsertTrackData,
   type UpsertAudioFeatures,
+  type LikedTrackData,
 } from '../database/repositories/track.repo.js';
 import { getSetting, setSetting } from '../database/repositories/settings.repo.js';
 import { recordInteraction } from '../database/repositories/interaction.repo.js';
@@ -25,14 +28,16 @@ import { upsertTopArtists, type UpsertTopArtistData } from '../database/reposito
 import { learnFromExternalPlay } from '../intelligence/context-learning.js';
 
 /**
- * Sync all saved tracks from the user's Spotify library.
- * Pages through the entire library, upserting into the local database.
+ * Sync all saved tracks (Liked Songs) from the user's Spotify library.
+ * Records liked dates and every artist. After a complete pass, tracks no
+ * longer liked get liked_at = NULL.
  */
 export async function syncSavedTracks(): Promise<number> {
   logger.info('Starting saved tracks sync...');
   let total = 0;
   let offset = 0;
   const limit = 50; // Spotify max per page
+  const seen: string[] = [];
 
   while (true) {
     const data = await spotifyFetch<{
@@ -43,18 +48,25 @@ export async function syncSavedTracks(): Promise<number> {
 
     if (!data.items || data.items.length === 0) break;
 
-    const tracks: UpsertTrackData[] = data.items.map((item: any) => ({
-      spotifyId: item.track.id,
-      name: item.track.name,
-      artist: item.track.artists.map((a: any) => a.name).join(', '),
-      artistId: item.track.artists[0]?.id ?? undefined,
-      album: item.track.album?.name,
-      albumArtUrl: item.track.album?.images?.[0]?.url,
-      durationMs: item.track.duration_ms,
-      source: 'library',
-    }));
+    const tracks: LikedTrackData[] = data.items
+      .filter((item: any) => item.track?.id)
+      .map((item: any) => ({
+        spotifyId: item.track.id,
+        name: item.track.name,
+        artist: item.track.artists.map((a: any) => a.name).join(', '),
+        artistId: item.track.artists[0]?.id ?? undefined,
+        album: item.track.album?.name,
+        albumArtUrl: item.track.album?.images?.[0]?.url,
+        durationMs: item.track.duration_ms,
+        source: 'library',
+        likedAt: item.added_at,
+        artists: item.track.artists
+          .filter((a: any) => a.id)
+          .map((a: any) => ({ id: a.id, name: a.name })),
+      }));
 
-    upsertTracks(tracks);
+    upsertLikedTracks(tracks);
+    for (const t of tracks) seen.push(t.spotifyId);
     total += tracks.length;
     offset += limit;
 
@@ -63,7 +75,9 @@ export async function syncSavedTracks(): Promise<number> {
     if (!data.next) break;
   }
 
-  logger.info({ total }, 'Saved tracks sync complete');
+  // Only reached when the loop completed without throwing.
+  const unliked = clearUnlikedTracks(seen);
+  logger.info({ total, unliked }, 'Saved tracks sync complete');
   return total;
 }
 

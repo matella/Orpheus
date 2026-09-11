@@ -1,5 +1,6 @@
 import { getDb } from '../connection.js';
 import type { TrackRow } from '../types.js';
+import { upsertArtistNames, setTrackArtists, type ArtistRef } from './artist.repo.js';
 
 export interface UpsertTrackData {
   spotifyId: string;
@@ -104,6 +105,60 @@ export function upsertTracks(tracks: UpsertTrackData[]): void {
   }
 }
 
+export interface LikedTrackData extends UpsertTrackData {
+  likedAt: string;
+  artists: ArtistRef[];
+}
+
+/**
+ * Upsert tracks from the user's Liked Songs: base track data, liked date,
+ * the full artist list, and artist names. Runs in one SAVEPOINT.
+ */
+export function upsertLikedTracks(tracks: LikedTrackData[]): void {
+  const db = getDb();
+  db.prepare('SAVEPOINT upsert_liked').run();
+  try {
+    upsertTracks(tracks);
+    const setLiked = db.prepare('UPDATE tracks SET liked_at = ? WHERE spotify_id = ?');
+    const getId = db.prepare('SELECT id FROM tracks WHERE spotify_id = ?');
+    for (const t of tracks) {
+      setLiked.run(t.likedAt, t.spotifyId);
+      const row = getId.get(t.spotifyId) as { id: number } | undefined;
+      if (!row) continue;
+      upsertArtistNames(t.artists);
+      setTrackArtists(row.id, t.artists.map((a) => a.id));
+    }
+    db.prepare('RELEASE upsert_liked').run();
+  } catch (err) {
+    db.prepare('ROLLBACK TO upsert_liked').run();
+    throw err;
+  }
+}
+
+/**
+ * After a complete Liked Songs pass, un-like tracks that were not seen.
+ * Returns the number of tracks whose liked_at was cleared.
+ */
+export function clearUnlikedTracks(seenSpotifyIds: string[]): number {
+  const db = getDb();
+  db.prepare('SAVEPOINT clear_unliked').run();
+  try {
+    db.exec('CREATE TEMP TABLE IF NOT EXISTS seen_liked (spotify_id TEXT PRIMARY KEY)');
+    db.exec('DELETE FROM seen_liked');
+    const insert = db.prepare('INSERT OR IGNORE INTO seen_liked (spotify_id) VALUES (?)');
+    for (const id of seenSpotifyIds) insert.run(id);
+    const result = db.prepare(`
+      UPDATE tracks SET liked_at = NULL
+      WHERE liked_at IS NOT NULL AND spotify_id NOT IN (SELECT spotify_id FROM seen_liked)
+    `).run();
+    db.prepare('RELEASE clear_unliked').run();
+    return Number(result.changes);
+  } catch (err) {
+    db.prepare('ROLLBACK TO clear_unliked').run();
+    throw err;
+  }
+}
+
 /**
  * Update audio features for a track.
  */
@@ -126,7 +181,8 @@ export function updateAudioFeatures(features: UpsertAudioFeatures): void {
       mode = ?,
       time_signature = ?,
       aggressiveness = ?,
-      features_fetched = 1
+      features_fetched = 1,
+      features_source = 'spotify'
     WHERE spotify_id = ?
   `).run(
     features.energy,
@@ -294,7 +350,8 @@ export function markTracksWithDefaultFeatures(): number {
       mode = 1,
       time_signature = 4,
       aggressiveness = 0.5,
-      features_fetched = 1
+      features_fetched = 1,
+      features_source = 'default'
     WHERE features_fetched = 0
   `).run();
   return Number(result.changes);
