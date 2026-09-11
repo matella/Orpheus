@@ -188,6 +188,7 @@ export async function createSpotifyPlaylist(
 export async function addTracksToPlaylist(
   playlistId: string,
   uris: string[],
+  onProgress?: (added: number) => void,
 ): Promise<number> {
   let added = 0;
   for (let i = 0; i < uris.length; i += 100) {
@@ -206,6 +207,7 @@ export async function addTracksToPlaylist(
       );
     }
     added += batch.length;
+    onProgress?.(added);
   }
   return added;
 }
