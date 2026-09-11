@@ -161,7 +161,7 @@ Artist search among liked-track artists (limit 20) and all liked tracks of one a
 
 ### Client
 
-Flutter SDK available at `/Users/matella/Coding/SDK/flutter` (3.41.2 stable, Dart 3.11.0 — satisfies `pubspec.lock`). Run `flutter analyze` and `flutter test` with the full path; add widget tests for `genre_builder_provider` derivation (`visibleTracks`) and `GenreFamilyPicker`. Manual checklist delivered with the PR.
+Flutter SDK available at `/Users/matella/Coding/SDK/flutter` (upgraded 2026-09-11 to 3.47.3 stable, Dart 3.13.3 — satisfies `pubspec.lock`; Android/Xcode toolchains not installed, irrelevant for analyze/test/web). Run `flutter analyze` and `flutter test` with the full path; add widget tests for `genre_builder_provider` derivation (`visibleTracks`) and `GenreFamilyPicker`. Manual checklist delivered with the PR.
 
 ### Rollout order (one commit each)
 
