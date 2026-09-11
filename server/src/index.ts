@@ -3,6 +3,7 @@ import { initDb, closeDb } from './database/connection.js';
 import { runMigrations } from './database/migrations.js';
 import { startServer } from './api/server.js';
 import { registerLibrarySyncTasks } from './scheduler/tasks/sync-library.js';
+import { registerArtistGenreSyncTask } from './scheduler/tasks/sync-artist-genres.js';
 import { registerPlayerPollTask } from './scheduler/tasks/poll-player.js';
 import { registerAnalyticsComputeTask } from './scheduler/tasks/compute-analytics.js';
 import { registerMonthlyRecapTask } from './scheduler/tasks/monthly-recap.js';
@@ -30,6 +31,7 @@ async function main() {
 
   // Register and start scheduled tasks
   registerLibrarySyncTasks();
+  registerArtistGenreSyncTask();
   registerPlayerPollTask();
   registerAnalyticsComputeTask();
   registerMonthlyRecapTask();

@@ -1,5 +1,4 @@
 import { spotifyFetch } from './client.js';
-import { runArtistGenreSync } from './artist-genre-sync.js';
 import { SpotifyApiError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 import {
@@ -335,15 +334,6 @@ export async function bootstrapPreferencesFromTopTracks(): Promise<boolean> {
 }
 
 /**
- * Populate artist genres (all genres, per artist) and tracks.genre_cluster.
- * Bounded to 4 minutes per call so the scheduler's 5-minute task timeout
- * is never hit; the remainder resumes on the next run.
- */
-export async function syncArtistGenres(): Promise<number> {
-  return runArtistGenreSync({ maxDurationMs: 4 * 60 * 1000 });
-}
-
-/**
  * Sync the user's top artists from Spotify (short, medium, and long term).
  * Stores in spotify_top_artists table with full genre data.
  */
@@ -517,7 +507,8 @@ export async function getSpotifyRecommendations(params: {
 
 /**
  * Run a full library sync: saved tracks, top tracks, top artists,
- * recently played, audio features, artist genres, and preference management.
+ * recently played, audio features, and preference management.
+ * Artist genre sync runs as its own scheduled task (see sync-artist-genres.ts).
  */
 export async function fullLibrarySync(): Promise<{
   savedTracks: number;
@@ -525,7 +516,6 @@ export async function fullLibrarySync(): Promise<{
   topArtists: number;
   recentTracks: number;
   audioFeatures: number;
-  artistGenres: number;
   preferencesBootstrapped: boolean;
   preferencesRefreshed: number;
 }> {
@@ -536,14 +526,13 @@ export async function fullLibrarySync(): Promise<{
   const topArtists = await syncTopArtists();
   const recentTracks = await syncRecentlyPlayed();
   const audioFeatures = await syncAudioFeatures();
-  const artistGenres = await syncArtistGenres();
   const preferencesBootstrapped = await bootstrapPreferencesFromTopTracks();
   const preferencesRefreshed = await refreshPreferencesFromTopTracks();
 
   logger.info(
-    { savedTracks, topTracks, topArtists, recentTracks, audioFeatures, artistGenres, preferencesBootstrapped, preferencesRefreshed },
+    { savedTracks, topTracks, topArtists, recentTracks, audioFeatures, preferencesBootstrapped, preferencesRefreshed },
     '=== Full library sync complete ===',
   );
 
-  return { savedTracks, topTracks, topArtists, recentTracks, audioFeatures, artistGenres, preferencesBootstrapped, preferencesRefreshed };
+  return { savedTracks, topTracks, topArtists, recentTracks, audioFeatures, preferencesBootstrapped, preferencesRefreshed };
 }

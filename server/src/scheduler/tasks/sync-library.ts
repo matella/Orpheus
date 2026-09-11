@@ -9,7 +9,7 @@ import {
 /**
  * Register library sync tasks with the scheduler.
  *
- * - Full sync: every 6 hours (saves tracks + top tracks/artists + recent + audio + genres + prefs)
+ * - Full sync: every 6 hours (saves tracks + top tracks/artists + recent + audio + prefs)
  * - Recent sync: every 15 minutes (recently played + new audio features)
  * - Top artists sync: every 12 hours (Spotify top artists with genre data)
  */
