@@ -1,4 +1,5 @@
 import { spotifyFetch } from './client.js';
+import { runArtistGenreSync } from './artist-genre-sync.js';
 import { SpotifyApiError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 import {
@@ -13,8 +14,6 @@ import {
   getTracksMissingFeatures,
   markTracksWithDefaultFeatures,
   getTrackBySpotifyId,
-  getArtistIdsMissingGenres,
-  setGenreClusterByArtist,
   upsertLikedTracks,
   clearUnlikedTracks,
   type UpsertTrackData,
@@ -336,43 +335,12 @@ export async function bootstrapPreferencesFromTopTracks(): Promise<boolean> {
 }
 
 /**
- * Populate genre_cluster for tracks by fetching artist genres from Spotify.
- * Processes artists in batches of 50.
+ * Populate artist genres (all genres, per artist) and tracks.genre_cluster.
+ * Bounded to 4 minutes per call so the scheduler's 5-minute task timeout
+ * is never hit; the remainder resumes on the next run.
  */
 export async function syncArtistGenres(): Promise<number> {
-  logger.info('Syncing artist genres...');
-  let totalUpdated = 0;
-
-  while (true) {
-    const artistIds = getArtistIdsMissingGenres(50);
-    if (artistIds.length === 0) break;
-
-    try {
-      const data = await spotifyFetch<{ artists: any[] }>(
-        `/artists?ids=${artistIds.join(',')}`,
-      );
-
-      if (!data.artists) break;
-
-      for (const artist of data.artists) {
-        if (!artist || !artist.genres || artist.genres.length === 0) continue;
-        const genre = artist.genres[0]; // Primary genre
-        const updated = setGenreClusterByArtist(artist.id, genre);
-        totalUpdated += updated;
-      }
-
-      logger.debug({ batch: artistIds.length, totalUpdated }, 'Artist genres batch processed');
-    } catch (err) {
-      if (err instanceof SpotifyApiError && err.statusCode === 403) {
-        logger.warn('Artists endpoint returned 403 -- skipping genre sync');
-        break;
-      }
-      throw err;
-    }
-  }
-
-  logger.info({ totalUpdated }, 'Artist genres sync complete');
-  return totalUpdated;
+  return runArtistGenreSync({ maxDurationMs: 4 * 60 * 1000 });
 }
 
 /**
