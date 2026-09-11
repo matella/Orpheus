@@ -385,6 +385,61 @@ class ApiService {
       if (ttsDuckVolume != null) 'ttsDuckVolume': ttsDuckVolume,
     });
   }
+
+  // ── Genre playlists ─────────────────────────────────────────
+
+  /// Genre families + counts over Liked Songs, and genre-sync progress.
+  Future<Map<String, dynamic>> getLibraryGenres() async {
+    final response = await _dio.get('/library/genres');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Start the artist-genre sync. A 409 (already running) is not an error.
+  Future<void> triggerGenreSync() async {
+    try {
+      await _dio.post('/library/genres/sync');
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 409) rethrow;
+    }
+  }
+
+  /// Every liked track matching the filters (no cap) + artists with counts.
+  Future<Map<String, dynamic>> previewGenrePlaylist(Map<String, dynamic> filters) async {
+    final response = await _dio.post(
+      '/genre-playlists/preview',
+      data: filters,
+      options: Options(receiveTimeout: const Duration(seconds: 30)),
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Artists on liked tracks whose name contains [query].
+  Future<List<dynamic>> searchLibraryArtists(String query) async {
+    final response = await _dio.get('/library/artists', queryParameters: {'q': query});
+    return response.data['artists'] as List? ?? [];
+  }
+
+  /// All liked tracks of one artist, regardless of genre.
+  Future<List<dynamic>> getArtistLikedTracks(String artistId) async {
+    final response = await _dio.get('/library/artists/${Uri.encodeComponent(artistId)}/liked-tracks');
+    return response.data['tracks'] as List? ?? [];
+  }
+
+  /// Track ids ordered for smooth transitions (requires real audio features).
+  Future<List<int>> orderTracksSmooth(List<int> trackIds) async {
+    final response = await _dio.post('/genre-playlists/order', data: {'trackIds': trackIds});
+    return (response.data['trackIds'] as List).map((e) => (e as num).toInt()).toList();
+  }
+
+  /// Create the Spotify playlist from the final ordered track ids.
+  Future<Map<String, dynamic>> exportGenrePlaylist(Map<String, dynamic> body) async {
+    final response = await _dio.post(
+      '/genre-playlists/export',
+      data: body,
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    );
+    return response.data as Map<String, dynamic>;
+  }
 }
 
 /// Global API service instance
