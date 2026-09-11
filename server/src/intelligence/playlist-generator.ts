@@ -9,6 +9,7 @@ import {
   type InsertPlaylistTrackData,
 } from '../database/repositories/playlist.repo.js';
 import { scoreTrack } from './scorer.js';
+import { greedyNearestNeighbor } from './track-ordering.js';
 import type { ScoringContext, StateVector, SteeringControls } from './types.js';
 import { DEFAULT_STEERING } from './types.js';
 import { parsePlaylistPrompt, generatePlaylistName, suggestArtistsForRequest } from '../ai/service.js';
@@ -485,44 +486,6 @@ function orderByTransitionSmoothness(
   }
 
   return result;
-}
-
-function greedyNearestNeighbor(
-  tracks: { track: TrackRow; score: number; segment: number }[],
-): { track: TrackRow; score: number; segment: number }[] {
-  if (tracks.length <= 1) return tracks;
-
-  const ordered = [tracks[0]];
-  const remaining = new Set(tracks.slice(1));
-
-  while (remaining.size > 0) {
-    const last = ordered[ordered.length - 1].track;
-    let best: { track: TrackRow; score: number; segment: number } | null = null;
-    let bestCost = Infinity;
-
-    for (const candidate of remaining) {
-      const cost = transitionCost(last, candidate.track);
-      if (cost < bestCost) {
-        bestCost = cost;
-        best = candidate;
-      }
-    }
-
-    if (best) {
-      ordered.push(best);
-      remaining.delete(best);
-    }
-  }
-
-  return ordered;
-}
-
-function transitionCost(a: TrackRow, b: TrackRow): number {
-  const bpmDelta = Math.abs((a.tempo ?? 120) - (b.tempo ?? 120)) / Math.max(1, a.tempo ?? 120);
-  const energyDelta = Math.abs((a.energy ?? 0.5) - (b.energy ?? 0.5));
-  const valenceDelta = Math.abs((a.valence ?? 0.5) - (b.valence ?? 0.5));
-  const keyDelta = (a.key != null && b.key != null && a.key !== b.key) ? 0.3 : 0;
-  return bpmDelta + energyDelta + valenceDelta + keyDelta;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
