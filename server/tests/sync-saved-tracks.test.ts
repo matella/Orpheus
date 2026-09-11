@@ -41,4 +41,18 @@ describe('syncSavedTracks un-like sweep', () => {
 
     expect(db.prepare("SELECT liked_at FROM tracks WHERE spotify_id = 'liked'").get()).toEqual({ liked_at: '2024-01-01' });
   });
+
+  it('still sweeps on a complete pass that contains unavailable (track: null) items', async () => {
+    insertTestTrack(db, { spotifyId: 'gone', likedAt: '2024-01-01' });
+    fetchMock.mockResolvedValueOnce({
+      items: [item('keep', '2024-05-01T00:00:00Z'), { added_at: '2024-04-01T00:00:00Z', track: null }],
+      total: 2,
+      next: null,
+    });
+
+    await syncSavedTracks();
+
+    expect(db.prepare("SELECT liked_at FROM tracks WHERE spotify_id = 'gone'").get()).toEqual({ liked_at: null });
+    expect(db.prepare("SELECT liked_at FROM tracks WHERE spotify_id = 'keep'").get()).toEqual({ liked_at: '2024-05-01T00:00:00Z' });
+  });
 });

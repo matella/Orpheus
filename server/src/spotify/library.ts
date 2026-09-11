@@ -39,6 +39,7 @@ export async function syncSavedTracks(): Promise<number> {
   const limit = 50; // Spotify max per page
   const seen: string[] = [];
   let reportedTotal: number | null = null;
+  let received = 0;
 
   while (true) {
     const data = await spotifyFetch<{
@@ -50,6 +51,8 @@ export async function syncSavedTracks(): Promise<number> {
     reportedTotal = data.total;
 
     if (!data.items || data.items.length === 0) break;
+
+    received += data.items.length;
 
     const tracks: LikedTrackData[] = data.items
       .filter((item: any) => item.track?.id)
@@ -81,10 +84,10 @@ export async function syncSavedTracks(): Promise<number> {
   // Only sweep after a complete pass: a short or empty pass (API glitch)
   // must never clear liked flags.
   let unliked = 0;
-  if (reportedTotal !== null && seen.length >= reportedTotal) {
+  if (reportedTotal !== null && received >= reportedTotal) {
     unliked = clearUnlikedTracks(seen);
   } else {
-    logger.warn({ seen: seen.length, reportedTotal }, 'Saved tracks pass incomplete — skipping un-like sweep');
+    logger.warn({ received, seen: seen.length, reportedTotal }, 'Saved tracks pass incomplete — skipping un-like sweep');
   }
   logger.info({ total, unliked }, 'Saved tracks sync complete');
   return total;
