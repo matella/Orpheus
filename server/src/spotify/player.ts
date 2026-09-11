@@ -1,6 +1,7 @@
 import { spotifyFetch } from './client.js';
 import { logger } from '../shared/logger.js';
 import { sleep } from '../shared/utils.js';
+import { SpotifyApiError, PlaylistPartialError } from '../shared/errors.js';
 import type { SpotifyPlayerState, SpotifyDevice } from './types.js';
 
 /**
@@ -162,17 +163,15 @@ export async function transferPlayback(deviceId: string): Promise<void> {
 }
 
 /**
- * Create a new playlist on the user's Spotify account.
+ * Create a new playlist on the current user's Spotify account.
  */
 export async function createSpotifyPlaylist(
   name: string,
   description: string,
   isPublic: boolean = false,
 ): Promise<{ id: string; url: string }> {
-  const me = await spotifyFetch<{ id: string }>('/me');
-  if (!me?.id) throw new Error('Could not fetch Spotify user ID');
   const data = await spotifyFetch<{ id: string; external_urls: { spotify: string } }>(
-    `/users/${me.id}/playlists`,
+    '/me/playlists',
     {
       method: 'POST',
       body: JSON.stringify({ name, description, public: isPublic }),
@@ -183,19 +182,32 @@ export async function createSpotifyPlaylist(
 }
 
 /**
- * Add tracks to a Spotify playlist. Batches in groups of 100 (Spotify limit).
+ * Add items to a Spotify playlist in batches of 100 (Spotify limit).
+ * Returns the number of URIs added. Throws PlaylistPartialError if a batch fails.
  */
 export async function addTracksToPlaylist(
   playlistId: string,
   uris: string[],
-): Promise<void> {
+): Promise<number> {
+  let added = 0;
   for (let i = 0; i < uris.length; i += 100) {
     const batch = uris.slice(i, i + 100);
-    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
-      method: 'POST',
-      body: JSON.stringify({ uris: batch }),
-    });
+    try {
+      await spotifyFetch(`/playlists/${playlistId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ uris: batch }),
+      });
+    } catch (err) {
+      const status = err instanceof SpotifyApiError ? err.statusCode : 502;
+      throw new PlaylistPartialError(
+        `Failed adding items to playlist ${playlistId} after ${added} tracks: ${(err as Error).message}`,
+        added,
+        status,
+      );
+    }
+    added += batch.length;
   }
+  return added;
 }
 
 /**

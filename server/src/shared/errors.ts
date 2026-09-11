@@ -43,3 +43,14 @@ export class AiError extends OrpheusError {
     this.name = 'AiError';
   }
 }
+
+/**
+ * Thrown when adding tracks to a playlist fails part-way.
+ * `addedCount` is the number of URIs successfully added before the failure.
+ */
+export class PlaylistPartialError extends SpotifyApiError {
+  constructor(message: string, public readonly addedCount: number, statusCode: number = 502) {
+    super(message, statusCode);
+    this.name = 'PlaylistPartialError';
+  }
+}
