@@ -69,12 +69,7 @@ class SecondaryFilters extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text('Max tracks (empty = all)', style: small),
-        TextFormField(
-          initialValue: limit?.toString() ?? '',
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(isDense: true, hintText: 'All'),
-          onChanged: (v) => onLimit(int.tryParse(v.trim())),
-        ),
+        _LimitField(limit: limit, onLimit: onLimit),
         if (featuresAvailable) ...[
           const SizedBox(height: 12),
           Text('Energy', style: small),
@@ -89,6 +84,49 @@ class SecondaryFilters extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Track-limit input that re-syncs when the limit changes from outside
+/// (e.g. the "New playlist" reset) without disturbing the user's typing.
+class _LimitField extends StatefulWidget {
+  final int? limit;
+  final ValueChanged<int?> onLimit;
+
+  const _LimitField({required this.limit, required this.onLimit});
+
+  @override
+  State<_LimitField> createState() => _LimitFieldState();
+}
+
+class _LimitFieldState extends State<_LimitField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.limit?.toString() ?? '');
+
+  @override
+  void didUpdateWidget(_LimitField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only overwrite the text when it no longer represents the current limit,
+    // so typing (which already produced this limit) keeps its cursor.
+    if (int.tryParse(_controller.text.trim()) != widget.limit) {
+      _controller.text = widget.limit?.toString() ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      keyboardType: TextInputType.number,
+      decoration: const InputDecoration(isDense: true, hintText: 'All'),
+      onChanged: (v) => widget.onLimit(int.tryParse(v.trim())),
     );
   }
 }
