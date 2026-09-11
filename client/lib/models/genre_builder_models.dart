@@ -206,3 +206,48 @@ DerivedTracks deriveTracks({
 
 String formatApiDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Unchecked ids to keep after the preview changes: ids still visible,
+/// i.e. in the new preview or among force-added artists' tracks.
+Set<int> retainUnchecked({
+  required Set<int> uncheckedIds,
+  required List<PreviewTrack> previewTracks,
+  required Map<String, List<PreviewTrack>> forcedArtistTracks,
+}) {
+  final visible = {
+    for (final t in previewTracks) t.id,
+    for (final t in forcedArtistTracks.values.expand((l) => l)) t.id,
+  };
+  return uncheckedIds.where(visible.contains).toSet();
+}
+
+/// Builder state touched by toggling an artist's exclusion.
+typedef ArtistExclusionState = ({
+  Set<String> excludedArtistIds,
+  Map<String, List<PreviewTrack>> forcedArtistTracks,
+  Map<String, String> forcedArtistNames,
+});
+
+/// Toggles an artist's exclusion. Excluding a forced artist also un-forces it
+/// (the last action wins), so forced and excluded artists never overlap.
+ArtistExclusionState toggleArtistExclusion({
+  required String artistId,
+  required Set<String> excludedArtistIds,
+  required Map<String, List<PreviewTrack>> forcedArtistTracks,
+  required Map<String, String> forcedArtistNames,
+}) {
+  final excluded = {...excludedArtistIds};
+  if (excluded.remove(artistId)) {
+    return (
+      excludedArtistIds: excluded,
+      forcedArtistTracks: forcedArtistTracks,
+      forcedArtistNames: forcedArtistNames,
+    );
+  }
+  excluded.add(artistId);
+  return (
+    excludedArtistIds: excluded,
+    forcedArtistTracks: {...forcedArtistTracks}..remove(artistId),
+    forcedArtistNames: {...forcedArtistNames}..remove(artistId),
+  );
+}

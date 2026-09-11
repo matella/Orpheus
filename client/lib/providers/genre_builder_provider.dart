@@ -276,13 +276,16 @@ class GenreBuilderNotifier extends Notifier<GenreBuilderState> {
       final artists = (json['artists'] as List)
           .map((a) => PreviewArtist.fromJson(a as Map<String, dynamic>))
           .toList();
-      final stillPresent = tracks.map((t) => t.id).toSet();
       state = state.copyWith(
         loadingPreview: false,
         previewError: null,
         previewTracks: tracks,
         previewArtists: artists,
-        uncheckedIds: state.uncheckedIds.where(stillPresent.contains).toSet(),
+        uncheckedIds: retainUnchecked(
+          uncheckedIds: state.uncheckedIds,
+          previewTracks: tracks,
+          forcedArtistTracks: state.forcedArtistTracks,
+        ),
         smoothOrder: null,
         sort: state.sort == TrackSort.smooth ? TrackSort.likedDesc : state.sort,
       );
@@ -307,9 +310,17 @@ class GenreBuilderNotifier extends Notifier<GenreBuilderState> {
   }
 
   void toggleArtistExcluded(String artistId) {
-    final next = {...state.excludedArtistIds};
-    if (!next.remove(artistId)) next.add(artistId);
-    state = state.copyWith(excludedArtistIds: next);
+    final next = toggleArtistExclusion(
+      artistId: artistId,
+      excludedArtistIds: state.excludedArtistIds,
+      forcedArtistTracks: state.forcedArtistTracks,
+      forcedArtistNames: state.forcedArtistNames,
+    );
+    state = state.copyWith(
+      excludedArtistIds: next.excludedArtistIds,
+      forcedArtistTracks: next.forcedArtistTracks,
+      forcedArtistNames: next.forcedArtistNames,
+    );
   }
 
   Future<List<PreviewArtist>> searchArtists(String query) async {

@@ -69,4 +69,36 @@ void main() {
     expect(one.candidates.map((x) => x.id), two.candidates.map((x) => x.id));
     expect(one.candidates.length, 20);
   });
+
+  test('retainUnchecked keeps unchecks on force-added artist tracks', () {
+    final forced = t(9, artistIds: ['x']);
+    final kept = retainUnchecked(
+      uncheckedIds: {1, 9, 42},
+      previewTracks: [a],
+      forcedArtistTracks: {'x': [forced]},
+    );
+    expect(kept, {1, 9});
+  });
+
+  test('excluding a forced artist un-forces it; toggling again only un-excludes', () {
+    final forcedTrack = t(9, artistIds: ['x']);
+    final excluded = toggleArtistExclusion(
+      artistId: 'x',
+      excludedArtistIds: const {},
+      forcedArtistTracks: {'x': [forcedTrack]},
+      forcedArtistNames: const {'x': 'X'},
+    );
+    expect(excluded.excludedArtistIds, {'x'});
+    expect(excluded.forcedArtistTracks, isEmpty);
+    expect(excluded.forcedArtistNames, isEmpty);
+
+    final again = toggleArtistExclusion(
+      artistId: 'x',
+      excludedArtistIds: excluded.excludedArtistIds,
+      forcedArtistTracks: excluded.forcedArtistTracks,
+      forcedArtistNames: excluded.forcedArtistNames,
+    );
+    expect(again.excludedArtistIds, isEmpty);
+    expect(again.forcedArtistTracks, isEmpty);
+  });
 }
