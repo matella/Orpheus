@@ -296,7 +296,7 @@ Music/
                               # state-history, analytics, settings,
                               # time-preferences, ai-suggestion,
                               # monthly-recap, listening-stats, top-artists,
-                              # playlist, dj-preferences
+                              # playlist, dj-preferences, artist, genre-playlist
         types.ts              # Row type interfaces
       intelligence/
         state-vector.ts       # 8D state with EMA blending
