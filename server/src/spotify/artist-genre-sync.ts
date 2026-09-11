@@ -70,7 +70,11 @@ export async function runArtistGenreSync(opts: {
           break outer;
         }
         try {
-          const artist = await spotifyFetch<{ id: string; name: string; genres?: string[] }>(`/artists/${id}`);
+          const artist = await spotifyFetch<{ id: string; name: string; genres?: string[] }>(
+            `/artists/${id}`,
+            {},
+            { maxRetryAfterSec: 30 },
+          );
           const genres = artist?.genres ?? [];
           saveArtistGenres(id, artist?.name ?? null, genres);
           if (genres.length > 0) setGenreClusterByArtist(id, genres[0]);

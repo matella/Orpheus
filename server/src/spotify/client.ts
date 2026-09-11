@@ -11,6 +11,7 @@ const MAX_RATE_LIMIT_RETRIES = 3;
 export async function spotifyFetch<T>(
   endpoint: string,
   options: RequestInit = {},
+  opts: { maxRetryAfterSec?: number } = {},
 ): Promise<T> {
   const url = endpoint.startsWith('http') ? endpoint : `${SPOTIFY_API_BASE}${endpoint}`;
 
@@ -35,6 +36,16 @@ export async function spotifyFetch<T>(
         );
       }
       const retryAfter = parseInt(response.headers.get('Retry-After') ?? '5', 10);
+      if (opts.maxRetryAfterSec !== undefined && retryAfter > opts.maxRetryAfterSec) {
+        logger.warn(
+          { retryAfter, maxRetryAfterSec: opts.maxRetryAfterSec, endpoint },
+          'Spotify rate limit Retry-After exceeds cap — aborting instead of sleeping',
+        );
+        throw new SpotifyApiError(
+          `Spotify rate limit on ${endpoint}: Retry-After ${retryAfter}s exceeds ${opts.maxRetryAfterSec}s`,
+          429,
+        );
+      }
       logger.warn({ retryAfter, attempt: attempt + 1 }, 'Spotify rate limit hit, backing off');
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
       continue;
