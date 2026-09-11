@@ -81,11 +81,11 @@ Entry point: `index.ts` — initializes DB, starts Fastify server, registers cro
   - `adapter.ts` — `TtsAdapter` interface: `speak(text, voiceId?)`, `listVoices()`, `isAvailable()`
   - `piper.ts` — `PiperAdapter` singleton. Spawns `piper.exe` as subprocess (stdin←text, stdout→WAV). 10s timeout with `settled` flag to prevent double-reject. `isAvailable()` checks `PIPER_BINARY_PATH` exists. Throws `AiError` on failure.
 - **Database** (`database/`) — `node:sqlite` (Node 24 built-in), WAL mode, **9 migration versions** (v7: `dj_preferences` table; v8: `tts_enabled`, `tts_voice`, `tts_duck_volume` columns; v9: `tracks.liked_at`, `tracks.features_source`, `artists`, `artist_genres`, `track_artists`). 16 repository modules. `runMigrations(db, targetVersion?)` lets tests build older schemas. Uses SAVEPOINT transactions for batch operations (node:sqlite lacks db.transaction()).
-- **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), player poll (5s), analytics compute (midnight), monthly recap (1st of month), AI genre inference (6h at :30)
+- **Scheduler** (`scheduler/`) — Cron tasks: library sync (6h), artist genre sync (30 min, 4-min budget, runs on start), player poll (5s), analytics compute (midnight), monthly recap (1st of month), AI genre inference (6h at :30)
 
 **Key patterns:**
 - Singletons exported directly (`export const engine = new PlaybackEngine()`) — no DI container
-- Error hierarchy: `OrpheusError` base → `SpotifyAuthError`, `SpotifyApiError`, `PlaybackError`, `DatabaseError`, `AiError`
+- Error hierarchy: `OrpheusError` base → `SpotifyAuthError`, `SpotifyApiError` (→ `PlaylistPartialError`), `PlaybackError`, `DatabaseError`, `AiError`
 - Config validated via Zod schema (`config.ts`)
 - ESM throughout (`"type": "module"` in package.json)
 - Graceful startup: engine checks current Spotify playback, analyzes queue coherence, adopts coherent tracks without interrupting
