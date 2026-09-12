@@ -22,7 +22,6 @@ flutter pub get      # Install dependencies
 flutter run          # Run on default device
 flutter run -d chrome    # Web
 flutter run -d windows   # Windows desktop
-dart run build_runner build --delete-conflicting-outputs  # Generate freezed/riverpod code
 ```
 
 ### Ollama (optional AI)
