@@ -6,7 +6,7 @@ services:
     container_name: orpheus-server
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3010:3000"
     env_file:
       - ./server/.env
     environment:
@@ -30,7 +30,7 @@ services:
     container_name: orpheus-client
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8085:80"
     depends_on:
       - server
 
